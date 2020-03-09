@@ -28,6 +28,7 @@ fn main() {
     let merges = find_merges(&repo, revwalk);
     for merge in merges {
         println!("{},{},{},{}", merge.o, merge.a, merge.b, merge.m);
+        compare_commits(&repo, &merge);
     }
 }
 
@@ -56,6 +57,32 @@ fn find_merges(repo: &git2::Repository, revwalk: git2::Revwalk) -> Vec<ThreeWayM
             }
         })
         .collect()
+}
+
+fn compare_commits(repo: &git2::Repository, twm: &ThreeWayMerge) {
+    let c1 = repo
+        .find_commit(twm.o)
+        .expect("Should be able to find commit O");
+    let t1 = c1.tree().expect("Should be able to find tree for commit O");
+    let c2 = repo
+        .find_commit(twm.m)
+        .expect("Should be able to find commit M");
+    let t2 = c2.tree().expect("Should be able to find tree for commit M");
+
+    let mut diffoptions = git2::DiffOptions::new();
+    diffoptions.minimal(true).ignore_whitespace(true);
+    let diff = repo
+        .diff_tree_to_tree(Some(&t1), Some(&t2), Some(&mut diffoptions))
+        .expect("Should be able to diff two commits");
+    println!("Diff is: {:#?}", diff.stats());
+    for delta in diff.deltas() {
+        println!(
+            "{:?}, {:?}, {:?}",
+            delta.status(),
+            delta.old_file(),
+            delta.new_file()
+        );
+    }
 }
 
 struct ThreeWayMerge {
