@@ -1,6 +1,18 @@
+use clap::{App, Arg};
+
 fn main() {
-    // let repo = match git2::Repository::open("/Users/wardmuylaert/prog/fake-js-project/") {
-    let repo = match git2::Repository::open("/Users/wardmuylaert/prog/gumtree/") {
+    let matches = App::new("Merge Finder")
+        .version("0.1.0")
+        .author("Ward Muylaert <ward.muylaert@gmail.com>")
+        .about("Find 3-way merges in a git repository.")
+        .arg(
+            Arg::with_name("GITREPO")
+                .help("Give the path of an existing local git repository.")
+                .required(true),
+        )
+        .get_matches();
+    let repopath = matches.value_of("GITREPO").unwrap();
+    let repo = match git2::Repository::open(repopath) {
         Ok(repo) => repo,
         Err(e) => panic!("Failed to open: {}", e),
     };
