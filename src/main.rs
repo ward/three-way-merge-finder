@@ -1,5 +1,4 @@
 use clap::{App, Arg};
-use three_way_merge_finder::debugging;
 use three_way_merge_finder::merge::*;
 
 fn main() {
@@ -12,17 +11,30 @@ fn main() {
                 .help("Give the path of an existing local git repository.")
                 .required(true),
         )
+        .arg(
+            Arg::with_name("output-folder")
+                .long("output-folder")
+                .help("Specify a folder in which to place the details of merges. This information will not be produced if this parameter is not present.")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name("clean-output")
+                .long("clean-output")
+                .help("Clean the output folder before running"),
+        )
         .get_matches();
     let repopath = matches.value_of("GITREPO").unwrap();
+    let clean_output = matches.is_present("clean-output");
+    let output_folder = matches.value_of("output-folder");
     let repo = match git2::Repository::open(repopath) {
         Ok(repo) => repo,
         Err(e) => panic!("Failed to open: {}", e),
     };
     let revwalk = three_way_merge_finder::create_revwalk(&repo).expect("Could not create revwalk");
-    // debugging::diff_walk(&repo, revwalk);
-    let merges = find_merges(&repo, revwalk);
-    for merge in merges {
-        println!("{},{},{},{}", merge.o, merge.a, merge.b, merge.m);
-        compare_commits(&repo, &merge);
+
+    if let Some(output_folder) = output_folder {
+        three_way_merge_finder::publish::folder_dump(output_folder, clean_output);
+    } else {
+        three_way_merge_finder::publish::print_csv_of_merges(&repo, revwalk);
     }
 }

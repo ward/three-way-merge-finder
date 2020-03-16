@@ -2,8 +2,29 @@ pub fn create_revwalk(repo: &git2::Repository) -> Result<git2::Revwalk, git2::Er
     let mut revwalk = repo.revwalk()?;
     // Pushing marks a commit to start traversal from
     revwalk.push_head()?;
-    revwalk.set_sorting(git2::Sort::TOPOLOGICAL);
+    revwalk.set_sorting(git2::Sort::TOPOLOGICAL)?;
     Ok(revwalk)
+}
+
+pub mod publish {
+    pub fn print_csv_of_merges(repo: &git2::Repository, revwalk: git2::Revwalk) {
+        let merges = super::merge::find_merges(repo, revwalk);
+        println!("O,A,B,M");
+        for merge in merges {
+            println!("{},{},{},{}", merge.o, merge.a, merge.b, merge.m);
+            // super::merge::compare_commits(&repo, &merge);
+        }
+    }
+
+    pub fn folder_dump(folder: &str, clean_output: bool) {
+        // 1. Create folder if needed
+        // 2. Clean folder if asked for
+        // 3. Create a csv file of all merges in the folder
+        // 4. Create folder for every merge commit (just use hash as name)
+        // 5. Create O, A, B, and M folders in merge commit folder
+        // 6. Place detailed diff "overview" in a text file there?
+        // 7. Place files in O, A, B, and M folders (which exactly?)
+    }
 }
 
 pub mod merge {
@@ -67,6 +88,7 @@ pub mod merge {
         pub m: git2::Oid,
     }
 }
+
 pub mod debugging {
     pub fn diff_walk(repo: &git2::Repository, revwalk: git2::Revwalk) {
         let mut diffoptions = git2::DiffOptions::new();
