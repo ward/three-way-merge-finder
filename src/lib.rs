@@ -16,9 +16,13 @@ pub mod publish {
         }
     }
 
-    pub fn folder_dump(folder: &str, clean_output: bool) {
         // 1. Create folder if needed
         // 2. Clean folder if asked for
+    pub fn folder_dump<P: AsRef<std::path::Path>>(
+        folder: P,
+        repo: &git2::Repository,
+        revwalk: git2::Revwalk,
+    ) {
         // 3. Create a csv file of all merges in the folder
         // 4. Create folder for every merge commit (just use hash as name)
         // 5. Create O, A, B, and M folders in merge commit folder
