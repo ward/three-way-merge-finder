@@ -15,22 +15,39 @@ pub mod publish {
         }
     }
 
-        // 1. Create folder if needed
-        // 2. Clean folder if asked for
+    /// Finds the merges of a given git repository, dumps the changed files for each of them into
+    /// the provided folder. Final structure of that folder will be:
+    /// folder/mergehash/mergepart/path/to/file
+    ///
+    /// Folder needs to be empty, may or may not exist.
     pub fn folder_dump<P: AsRef<std::path::Path>>(
         folder: P,
         repo: &git2::Repository,
         revwalk: git2::Revwalk,
     ) {
-        // 3. Create a csv file of all merges in the folder
-        // 4. Create folder for every merge commit (just use hash as name)
-        // 5. Create O, A, B, and M folders in merge commit folder
-        // 6. Place detailed diff "overview" in a text file there?
-        // 7. Place files in O, A, B, and M folders (which exactly?)
+        let folder = folder.as_ref();
+        // Create folder if needed and check it is empty
+        std::fs::create_dir_all(&folder).expect("Could not create output-folder");
+        let mut dir_contents = std::fs::read_dir(&folder).expect("Could not read output-folder");
+        if dir_contents.next().is_some() {
+            panic!("Specified output-folder is not empty. Aborting.");
+        }
+
+        let merges = super::merge::find_merges(repo, revwalk);
+
+        // Create merge-hash folder and its o, a, b, and m subfolders.
+        for merge in merges {
+            let files = merge.files_to_consider(&repo);
+            let merge_path = folder.join(merge.m.to_string());
+            merge.write_files_to_disk(&merge_path, files, &repo);
+        }
+        // TODO? Create a csv file of all merges in the folder
+        // TODO? Place detailed diff "overview" in a text file there
     }
 }
 
-pub mod merge {
+mod merge {
+    use std::io::prelude::*;
     /// Walks through commits, looking for those with (exactly) two parents. Collects parents and
     /// the common base.
     pub fn find_merges(repo: &git2::Repository, revwalk: git2::Revwalk) -> Vec<ThreeWayMerge> {
@@ -84,6 +101,111 @@ pub mod merge {
                 b = self.b,
                 m = self.m
             )
+        }
+
+        /// Analyse the merge diffs to decide which files have been modified and are thus
+        /// interesting.
+        ///
+        /// Currently this only considers O to M, which may miss some changed behaviour
+        /// disappearing again. TODO
+        pub fn files_to_consider(
+            &self,
+            repo: &git2::Repository,
+        ) -> std::collections::HashSet<String> {
+            let mut diffoptions = git2::DiffOptions::new();
+            diffoptions.minimal(true).ignore_whitespace(true);
+            let o = repo.find_commit(self.o).expect("Failed to find O commit");
+            let otree = o.tree().expect("Failed to find tree for commit O");
+            let m = repo.find_commit(self.m).expect("Failed to find M commit");
+            let mtree = m.tree().expect("Failed to find tree for commit M");
+            let diff = repo
+                .diff_tree_to_tree(Some(&otree), Some(&mtree), Some(&mut diffoptions))
+                .expect("Should be able to diff O to M");
+            let mut paths = std::collections::HashSet::new();
+            for delta in diff.deltas() {
+                paths.insert(
+                    delta
+                        .old_file()
+                        .path()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_owned(),
+                );
+                paths.insert(
+                    delta
+                        .new_file()
+                        .path()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_owned(),
+                );
+            }
+            paths
+        }
+
+        /// For a given list of files, locates them in each part of the ThreeWayMerge. Places them
+        /// in o, a, b, or m folders which are created as subfolders of the provided folder.
+        pub fn write_files_to_disk<P: AsRef<std::path::Path>>(
+            &self,
+            folder: P,
+            changed_files: std::collections::HashSet<String>,
+            repo: &git2::Repository,
+        ) {
+            let folder = folder.as_ref();
+            let paths = [
+                folder.join("o"),
+                folder.join("a"),
+                folder.join("b"),
+                folder.join("m"),
+            ];
+            for path in &paths {
+                std::fs::create_dir_all(path).expect("Could not create folder");
+            }
+
+            write_files_from_commit_to_disk(folder.join("o"), self.o, repo, &changed_files, "O");
+            write_files_from_commit_to_disk(folder.join("a"), self.a, repo, &changed_files, "A");
+            write_files_from_commit_to_disk(folder.join("b"), self.b, repo, &changed_files, "B");
+            write_files_from_commit_to_disk(folder.join("m"), self.m, repo, &changed_files, "M");
+        }
+    }
+
+    /// For a given list of files, locates them in the commit and writes them into the provided
+    /// folder. The files are placed in subfolders mimicking their folders in the commit.
+    fn write_files_from_commit_to_disk<P: AsRef<std::path::Path>>(
+        folder: P,
+        commit: git2::Oid,
+        repo: &git2::Repository,
+        changed_files: &std::collections::HashSet<String>,
+        commit_description: &str,
+    ) {
+        let folder = folder.as_ref();
+        let commit = repo.find_commit(commit).unwrap();
+        let tree = commit.tree().unwrap();
+        for file in changed_files {
+            let tree_entry = tree.get_path(&std::path::Path::new(&file));
+            if tree_entry.is_err() {
+                println!(
+                    "Failed to find file {} in {}. Skipping.",
+                    &file, commit_description
+                );
+                continue;
+            }
+            let tree_entry = tree_entry.unwrap();
+            let obj = tree_entry.to_object(&repo).unwrap();
+            let blob = obj.as_blob().unwrap();
+            let fullfilepath = folder.join(file);
+            if let Some(filefolder) = fullfilepath.as_path().parent() {
+                std::fs::create_dir_all(filefolder).unwrap_or_else(|err| {
+                        panic!("Failed to create necessary folders to save file from git to disk. File: {:?}, Err: {}",
+                            fullfilepath,
+                            err);
+                    });
+            }
+            let mut writer = std::fs::File::create(&fullfilepath)
+                .unwrap_or_else(|_| panic!("Failed to open file for writing {:?}", &fullfilepath));
+            writer.write_all(blob.content()).unwrap();
         }
     }
 }
