@@ -28,6 +28,8 @@ pub mod publish {
 }
 
 pub mod merge {
+    /// Walks through commits, looking for those with (exactly) two parents. Collects parents and
+    /// the common base.
     pub fn find_merges(repo: &git2::Repository, revwalk: git2::Revwalk) -> Vec<ThreeWayMerge> {
         revwalk
             .map(|oid| {
@@ -46,45 +48,25 @@ pub mod merge {
                     .merge_base(parent1, parent2)
                     .expect("Could not find base for the two parent commits");
                 ThreeWayMerge {
-                    o: commit.id(),
+                    o: base,
                     a: parent1,
                     b: parent2,
-                    m: base,
+                    m: commit.id(),
                 }
             })
             .collect()
     }
 
-    pub fn compare_commits(repo: &git2::Repository, twm: &ThreeWayMerge) {
-        let c1 = repo
-            .find_commit(twm.o)
-            .expect("Should be able to find commit O");
-        let t1 = c1.tree().expect("Should be able to find tree for commit O");
-        let c2 = repo
-            .find_commit(twm.m)
-            .expect("Should be able to find commit M");
-        let t2 = c2.tree().expect("Should be able to find tree for commit M");
-
-        let mut diffoptions = git2::DiffOptions::new();
-        diffoptions.minimal(true).ignore_whitespace(true);
-        let diff = repo
-            .diff_tree_to_tree(Some(&t1), Some(&t2), Some(&mut diffoptions))
-            .expect("Should be able to diff two commits");
-        println!("Diff is: {:#?}", diff.stats());
-        for delta in diff.deltas() {
-            println!(
-                "{:?}, {:?}, {:?}",
-                delta.status(),
-                delta.old_file(),
-                delta.new_file()
-            );
-        }
-    }
-
+    /// Represents the four parts of a merge by storing the Oid of the merge commit, its parent
+    /// commits, and the original base commit.
     pub struct ThreeWayMerge {
+        /// The original base commit
         pub o: git2::Oid,
+        /// One parent
         pub a: git2::Oid,
+        /// Another parent
         pub b: git2::Oid,
+        /// The merge commit
         pub m: git2::Oid,
     }
 }
