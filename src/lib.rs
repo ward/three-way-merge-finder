@@ -11,8 +11,7 @@ pub mod publish {
         let merges = super::merge::find_merges(repo, revwalk);
         println!("O,A,B,M");
         for merge in merges {
-            println!("{},{},{},{}", merge.o, merge.a, merge.b, merge.m);
-            // super::merge::compare_commits(&repo, &merge);
+            println!("{}", merge.to_csv_line());
         }
     }
 
@@ -72,6 +71,20 @@ pub mod merge {
         pub b: git2::Oid,
         /// The merge commit
         pub m: git2::Oid,
+    }
+
+    impl ThreeWayMerge {
+        /// Return a comma separated line of the four commits that form a three way merge. Order:
+        /// O,A,B,M.
+        pub fn to_csv_line(&self) -> String {
+            format!(
+                "{o},{a},{b},{m}",
+                o = self.o,
+                a = self.a,
+                b = self.b,
+                m = self.m
+            )
+        }
     }
 }
 
