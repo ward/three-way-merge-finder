@@ -145,13 +145,25 @@ fn write_files_from_commit_to_disk<P: AsRef<std::path::Path>>(
         let tree_entry = tree.get_path(&std::path::Path::new(&file));
         if tree_entry.is_err() {
             println!(
-                "Failed to find file {} in {}. Skipping.",
+                "File {} not present in {}. Skipping.",
                 &file, commit_description
             );
             continue;
         }
         let tree_entry = tree_entry.unwrap();
-        let obj = tree_entry.to_object(&repo).unwrap();
+        let obj = match tree_entry.to_object(&repo) {
+            Ok(obj) => obj,
+            Err(err) => {
+                eprintln!(
+                    "ERR: '{}' when looking for file {} in commit {}. File had tree entry id: {}",
+                    err,
+                    file,
+                    commit.id(),
+                    tree_entry.id()
+                );
+                continue;
+            }
+        };
         let blob = obj.as_blob().unwrap();
         let fullfilepath = folder.join(file);
         if let Some(filefolder) = fullfilepath.as_path().parent() {
