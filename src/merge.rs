@@ -7,7 +7,7 @@ pub fn find_merges(repo: &git2::Repository, revwalk: git2::Revwalk) -> Vec<Three
             repo.find_commit(oid.expect("Failed to get Oid"))
                 .expect("Failed to turn oid into a commit")
         })
-    .filter(|commit| commit.parent_count() == 2)
+        .filter(|commit| commit.parent_count() == 2)
         .map(|commit| {
             let parent1 = commit
                 .parent_id(0)
@@ -15,17 +15,27 @@ pub fn find_merges(repo: &git2::Repository, revwalk: git2::Revwalk) -> Vec<Three
             let parent2 = commit
                 .parent_id(1)
                 .expect("Failed to get id for second parent.");
-            let base = repo
-                .merge_base(parent1, parent2)
-                .expect("Could not find base for the two parent commits");
-            ThreeWayMerge {
-                o: base,
-                a: parent1,
-                b: parent2,
-                m: commit.id(),
+            let base = repo.merge_base(parent1, parent2);
+            match base {
+                Ok(base) => Some(ThreeWayMerge {
+                    o: base,
+                    a: parent1,
+                    b: parent2,
+                    m: commit.id(),
+                }),
+                Err(e) => {
+                    eprintln!(
+                        "Could not find base for the two parent commits of {}. Full error: {}",
+                        commit.id(),
+                        e
+                    );
+                    None
+                }
             }
         })
-    .collect()
+        .filter(|twm| twm.is_some())
+        .map(|twm| twm.unwrap())
+        .collect()
 }
 
 /// Represents the four parts of a merge by storing the Oid of the merge commit, its parent
@@ -59,10 +69,7 @@ impl ThreeWayMerge {
     ///
     /// Currently this only considers O to M, which may miss some changed behaviour
     /// disappearing again. TODO
-    pub fn files_to_consider(
-        &self,
-        repo: &git2::Repository,
-    ) -> std::collections::HashSet<String> {
+    pub fn files_to_consider(&self, repo: &git2::Repository) -> std::collections::HashSet<String> {
         let mut diffoptions = git2::DiffOptions::new();
         diffoptions.minimal(true).ignore_whitespace(true);
         let o = repo.find_commit(self.o).expect("Failed to find O commit");
@@ -76,21 +83,21 @@ impl ThreeWayMerge {
         for delta in diff.deltas() {
             paths.insert(
                 delta
-                .old_file()
-                .path()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_owned(),
+                    .old_file()
+                    .path()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
             );
             paths.insert(
                 delta
-                .new_file()
-                .path()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_owned(),
+                    .new_file()
+                    .path()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
             );
         }
         paths
@@ -159,4 +166,3 @@ fn write_files_from_commit_to_disk<P: AsRef<std::path::Path>>(
         writer.write_all(blob.content()).unwrap();
     }
 }
-
