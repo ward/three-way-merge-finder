@@ -1,13 +1,24 @@
 use std::io::prelude::*;
 /// Walks through commits, looking for those with (exactly) two parents. Collects parents and
 /// the common base.
-pub fn find_merges(repo: &git2::Repository, revwalk: git2::Revwalk) -> Vec<ThreeWayMerge> {
+pub fn find_merges(
+    repo: &git2::Repository,
+    revwalk: git2::Revwalk,
+    before: Option<i64>,
+) -> Vec<ThreeWayMerge> {
     revwalk
         .map(|oid| {
             repo.find_commit(oid.expect("Failed to get Oid"))
                 .expect("Failed to turn oid into a commit")
         })
         .filter(|commit| commit.parent_count() == 2)
+        .filter(|commit| {
+            if let Some(before) = before {
+                commit.time().seconds() < before
+            } else {
+                true
+            }
+        })
         .map(|commit| {
             let parent1 = commit
                 .parent_id(0)
@@ -126,6 +137,15 @@ impl ThreeWayMerge {
         write_files_from_commit_to_disk(folder.join("a"), self.a, repo, &changed_files, "A");
         write_files_from_commit_to_disk(folder.join("b"), self.b, repo, &changed_files, "B");
         write_files_from_commit_to_disk(folder.join("m"), self.m, repo, &changed_files, "M");
+    }
+
+    /// Returns epoch seconds for the merge commit of the ThreeWayMerge. Timezone information is
+    /// discarded.
+    pub fn time(&self, repo: &git2::Repository) -> i64 {
+        repo.find_commit(self.m)
+            .expect("Failed to find merge commit")
+            .time()
+            .seconds()
     }
 }
 

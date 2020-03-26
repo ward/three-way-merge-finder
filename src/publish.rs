@@ -1,8 +1,8 @@
-pub fn print_csv_of_merges(repo: &git2::Repository, revwalk: git2::Revwalk) {
-    let merges = super::merge::find_merges(repo, revwalk);
+pub fn print_csv_of_merges(repo: &git2::Repository, revwalk: git2::Revwalk, before: Option<i64>) {
+    let merges = super::merge::find_merges(repo, revwalk, before);
     println!("O,A,B,M");
     for merge in merges {
-        println!("{}", merge.to_csv_line());
+        println!("{},{}", merge.to_csv_line(), merge.time(repo));
     }
 }
 
@@ -15,6 +15,7 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
     folder: P,
     repo: &git2::Repository,
     revwalk: git2::Revwalk,
+    before: Option<i64>,
 ) {
     let folder = folder.as_ref();
     // Create folder if needed and check it is empty
@@ -24,7 +25,7 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
         panic!("Specified output-folder is not empty. Aborting.");
     }
 
-    let merges = super::merge::find_merges(repo, revwalk);
+    let merges = super::merge::find_merges(repo, revwalk, before);
 
     // Create merge-hash folder and its o, a, b, and m subfolders.
     for merge in merges {

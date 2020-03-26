@@ -16,9 +16,18 @@ fn main() {
                 .help("Specify a folder in which to place the details of merges. This information will not be produced if this parameter is not present.")
                 .takes_value(true),
         )
+        .arg(
+            Arg::with_name("before")
+            .long("before")
+            .help("Specify a certain number of seconds since the UNIX epoch. Only merge commits made before this time will be used.")
+            .takes_value(true)
+        )
         .get_matches();
     let repopath = matches.value_of("GITREPO").unwrap();
     let output_folder = matches.value_of("output-folder");
+    let before: Option<i64> = matches
+        .value_of("before")
+        .and_then(|before| before.parse().ok());
     let repo = match git2::Repository::open(repopath) {
         Ok(repo) => repo,
         Err(e) => panic!("Failed to open: {}", e),
@@ -26,8 +35,8 @@ fn main() {
     let revwalk = three_way_merge_finder::create_revwalk(&repo).expect("Could not create revwalk");
 
     if let Some(output_folder) = output_folder {
-        three_way_merge_finder::publish::folder_dump(output_folder, &repo, revwalk);
+        three_way_merge_finder::publish::folder_dump(output_folder, &repo, revwalk, before);
     } else {
-        three_way_merge_finder::publish::print_csv_of_merges(&repo, revwalk);
+        three_way_merge_finder::publish::print_csv_of_merges(&repo, revwalk, before);
     }
 }
