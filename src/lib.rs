@@ -11,3 +11,5 @@ pub mod publish;
 mod merge;
 
 pub mod debugging;
+
+pub mod find_bug_fix;
