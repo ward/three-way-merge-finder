@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 git2 = "0.13"
 clap = "2"
+regex = "1.4.1"
+lazy_static = "1.4.0"

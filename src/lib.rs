@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 pub fn create_revwalk(repo: &git2::Repository) -> Result<git2::Revwalk, git2::Error> {
     let mut revwalk = repo.revwalk()?;
     // Pushing marks a commit to start traversal from
