@@ -1,3 +1,5 @@
+//! This module is used to find three way merges
+
 use std::io::prelude::*;
 /// Walks through commits, looking for those with (exactly) two parents. Collects parents and
 /// the common base.

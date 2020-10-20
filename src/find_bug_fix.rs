@@ -1,5 +1,6 @@
+//! This module is used to find bug-fixing commits
+
 use regex::Regex;
-use std::collections::HashSet;
 
 /// Given a git repository and a certain commit. Find the first bug fixing commit candidate.
 pub fn find_bug_fixing_commit(
@@ -22,7 +23,14 @@ pub fn find_bug_fixing_commit(
                 if let Ok(commit) = repo.find_commit(descendant) {
                     let summary = commit.summary().unwrap_or("");
                     let is_bug_fix = potential_bug_fix_summary(summary);
-                    println!("- {}: {} (fix? {})", commit.id(), summary, is_bug_fix);
+                    let time = commit.time().seconds();
+                    println!(
+                        "[{}] {}: {} (fix? {})",
+                        time,
+                        commit.id(),
+                        summary,
+                        is_bug_fix
+                    );
                 }
             }
         }
@@ -98,12 +106,15 @@ fn potential_bug_fix_summary(summary: &str) -> bool {
 /// already been handled. THUS if I keep a set of descendants, starting with just the commit we
 /// care about, then it is a matter of checking the parents of every commit I encounter. If a
 /// parent appears in my descendant list, add it to the descendant list.
+///
+/// Not that this does imply the descendants are _not_ sorted by time, but also by topology. Within
+/// one branch, this makes no difference. Across branches there is no time assumption you can make.
 fn get_descendants(
     repo: &git2::Repository,
     ancestor: git2::Oid,
-) -> Result<HashSet<git2::Oid>, git2::Error> {
-    let mut descendants = HashSet::new();
-    descendants.insert(ancestor);
+) -> Result<Vec<git2::Oid>, git2::Error> {
+    let mut descendants = Vec::new();
+    descendants.push(ancestor);
 
     let mut revwalk = repo.revwalk().unwrap();
     revwalk.push_head().unwrap();
@@ -118,11 +129,12 @@ fn get_descendants(
             .map(|ctr| commit.parent_id(ctr).unwrap())
             .any(|parent| descendants.contains(&parent));
         if parent_in_descendants {
-            descendants.insert(oid);
+            descendants.push(oid);
         }
     }
 
-    descendants.remove(&ancestor);
+    // The first commit we put in the vector was the ancestor. Remove it now.
+    descendants.remove(0);
 
     Ok(descendants)
 }

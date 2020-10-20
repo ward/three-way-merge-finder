@@ -1,3 +1,5 @@
+//! Used to actually get results and print them. Makes use to the [merge](crate::merge) module.
+
 pub fn print_csv_of_merges(repo: &git2::Repository, revwalk: git2::Revwalk, before: Option<i64>) {
     let merges = super::merge::find_merges(repo, revwalk, before);
     println!("O,A,B,M");
