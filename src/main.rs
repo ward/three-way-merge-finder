@@ -38,8 +38,8 @@ fn main() {
     let revwalk = three_way_merge_finder::create_revwalk(&repo).expect("Could not create revwalk");
     if let Some(find_bug_fix_matches) = matches.subcommand_matches("find-bug-fix") {
         let commit = find_bug_fix_matches.value_of("COMMIT").unwrap();
-        match three_way_merge_finder::find_bug_fix::find_bug_fixing_commit(&repo, commit) {
-            Ok(()) => {}
+        match three_way_merge_finder::find_bug_fix::find_bug_fixing_commits(&repo, commit) {
+            Ok(_) => {}
             Err(e) => eprintln!("Failed to find bug fixing commit.\nError: {}", e),
         }
     } else {

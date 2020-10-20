@@ -1,12 +1,15 @@
-//! This module is used to find bug-fixing commits
+//! This module is used to find bug-fixing commits. At the time of writing this is done by looking
+//! for keywords in the Git summary. Ideally it would also take into account the lines that are
+//! actually changed. Williams and Spacco (2008) propose some line tracking algorithm to this
+//! effect.
 
 use regex::Regex;
 
 /// Given a git repository and a certain commit. Find the first bug fixing commit candidate.
-pub fn find_bug_fixing_commit(
+pub fn find_bug_fixing_commits(
     repo: &git2::Repository,
     ancestor_str: &str,
-) -> Result<(), git2::Error> {
+) -> Result<Vec<git2::Oid>, git2::Error> {
     println!(
         "Looking for commit: {} in repo {}",
         ancestor_str,
@@ -16,28 +19,39 @@ pub fn find_bug_fixing_commit(
     let ancestor = repo.find_commit(ancestor_oid)?;
     println!("Found commit {:?}", ancestor);
 
-    match get_descendants(repo, ancestor_oid) {
-        Ok(descendants) => {
-            println!("Descendants:");
-            for descendant in descendants {
-                if let Ok(commit) = repo.find_commit(descendant) {
-                    let summary = commit.summary().unwrap_or("");
-                    let is_bug_fix = potential_bug_fix_summary(summary);
-                    let time = commit.time().seconds();
-                    println!(
-                        "[{}] {}: {} (fix? {})",
-                        time,
-                        commit.id(),
-                        summary,
-                        is_bug_fix
-                    );
-                }
+    let mut descendants = get_descendants(repo, ancestor_oid)?;
+
+    // Need to collect into a Vec, otherwise all the iterators retain the immutable borrow on
+    // descendants for too long.
+    let not_a_fix: Vec<_> = descendants
+        .iter()
+        .enumerate()
+        .filter(|(_ctr, descendant)| match repo.find_commit(**descendant) {
+            Ok(commit) => {
+                let summary = commit.summary().unwrap_or("");
+                !potential_bug_fix_summary(summary)
             }
-        }
-        Err(e) => eprintln!("Failed to get descendants: {}", e),
+            Err(e) => {
+                eprintln!(
+                    "Failed to find commit for descendant {} ??? This should not happen. Error: {}",
+                    descendant, e
+                );
+                true
+            }
+        })
+        .map(|(ctr, _)| ctr)
+        // Rev is important! If we remove from the front, then the indices that come after are no
+        // longer valid
+        .rev()
+        .collect();
+
+    for idx in not_a_fix {
+        descendants.remove(idx);
     }
 
-    Ok(())
+    _print_oids(&repo, &descendants);
+
+    Ok(descendants)
 }
 
 /// Doing this by means of the text in the summary. There are some methods available. Leaning
@@ -137,4 +151,21 @@ fn get_descendants(
     descendants.remove(0);
 
     Ok(descendants)
+}
+
+fn _print_oids(repo: &git2::Repository, oids: &Vec<git2::Oid>) {
+    for descendant in oids {
+        if let Ok(commit) = repo.find_commit(*descendant) {
+            let summary = commit.summary().unwrap_or("");
+            let is_bug_fix = potential_bug_fix_summary(summary);
+            let time = commit.time().seconds();
+            println!(
+                "[{}] {}: {} (fix? {})",
+                time,
+                commit.id(),
+                summary,
+                is_bug_fix
+            );
+        }
+    }
 }
