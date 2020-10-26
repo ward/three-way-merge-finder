@@ -1,23 +1,16 @@
 //! This module is used to find bug-fixing commits. At the time of writing this is done by looking
 //! for keywords in the Git summary. Ideally it would also take into account the lines that are
 //! actually changed. Williams and Spacco (2008) propose some line tracking algorithm to this
-//! effect.
+//! effect. Original SZZ did it with cvs annotate (~ git blame)
 
 use regex::Regex;
 
-/// Given a git repository and a certain commit. Find the first bug fixing commit candidate.
+/// Given a git repository and a certain commit. Find the bug fixing commit candidates.
 pub fn find_bug_fixing_commits(
     repo: &git2::Repository,
     ancestor_str: &str,
 ) -> Result<Vec<git2::Oid>, git2::Error> {
-    println!(
-        "Looking for commit: {} in repo {}",
-        ancestor_str,
-        repo.path().display()
-    );
     let ancestor_oid = git2::Oid::from_str(ancestor_str)?;
-    let ancestor = repo.find_commit(ancestor_oid)?;
-    println!("Found commit {:?}", ancestor);
 
     let mut descendants = get_descendants(repo, ancestor_oid)?;
 
@@ -127,7 +120,9 @@ fn get_descendants(
     repo: &git2::Repository,
     ancestor: git2::Oid,
 ) -> Result<Vec<git2::Oid>, git2::Error> {
-    let mut descendants = Vec::new();
+    // We use Oid instead of Commit types. Commit types do not have PartialEq so would not be able
+    // to use contains() further down.
+    let mut descendants: Vec<git2::Oid> = Vec::new();
     descendants.push(ancestor);
 
     let mut revwalk = repo.revwalk().unwrap();
@@ -139,6 +134,8 @@ fn get_descendants(
     for oid in revwalk {
         let oid = oid.unwrap();
         let commit = repo.find_commit(oid).unwrap();
+        // Clumsy way to get the parents. Commit has a parents() method, but that returns Commit
+        // types while we are collecting Oids.
         let parent_in_descendants = (0..commit.parent_count())
             .map(|ctr| commit.parent_id(ctr).unwrap())
             .any(|parent| descendants.contains(&parent));
