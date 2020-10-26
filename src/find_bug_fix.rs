@@ -49,7 +49,7 @@ pub fn find_bug_fixing_commits(
         descendants.remove(idx);
     }
 
-    _print_oids(&repo, &descendants);
+    // _print_oids(&repo, &descendants);
 
     Ok(descendants)
 }
@@ -153,7 +153,7 @@ fn get_descendants(
     Ok(descendants)
 }
 
-fn _print_oids(repo: &git2::Repository, oids: &Vec<git2::Oid>) {
+fn _print_oids(repo: &git2::Repository, oids: &[git2::Oid]) {
     for descendant in oids {
         if let Ok(commit) = repo.find_commit(*descendant) {
             let summary = commit.summary().unwrap_or("");
@@ -166,6 +166,70 @@ fn _print_oids(repo: &git2::Repository, oids: &Vec<git2::Oid>) {
                 summary,
                 is_bug_fix
             );
+            _find_responsible_commits(repo, descendant).unwrap();
         }
     }
+}
+
+/// Started out by looking at the lines that were changed by the bug_fixing_commit, cause those are
+/// of interest. However, using the original SZZ might be fuzzy at best in this regard. The way I
+/// understand it, they look at that line number and then git blame (technically, csv annotate) the
+/// line number in the previous version of the file. It's easier to implement though, obviously,
+/// but if the developer was only adding a line, then doing this is meaningless.
+///
+/// williams2008-defects tries to solve this through some line matching bipartite graph with
+/// levenstein distances, but that is evidently a little more involved to implement.
+pub fn _find_responsible_commits(
+    repo: &git2::Repository,
+    bug_fixing_commit: &git2::Oid,
+) -> Result<std::collections::HashSet<git2::Oid>, git2::Error> {
+    let bug_inducing_commits = std::collections::HashSet::new();
+
+    let commit = repo.find_commit(*bug_fixing_commit)?;
+
+    let file_tree = commit.tree()?;
+
+    let mut blame_options = git2::BlameOptions::new();
+    blame_options.newest_commit(*bug_fixing_commit);
+
+    println!("Tree:");
+    // TODO What does this do to directories? Autowalk or we need to handle them?
+    for tree_entry in file_tree.iter() {
+        println!("tree_entry: {:?}", tree_entry.name());
+
+        // Find the lines changed in the bug_fixing_commit
+        let blames = repo
+            .blame_file(
+                std::path::Path::new(tree_entry.name().unwrap()),
+                Some(&mut blame_options),
+            )
+            .unwrap();
+
+        let mut lines_changed_by_fixing_commit = Vec::new();
+        for blame in blames.iter() {
+            if blame.final_commit_id() == *bug_fixing_commit {
+                println!("BlameHunk changed in this version");
+                _print_blame(&blame);
+                lines_changed_by_fixing_commit
+                    .push((blame.final_start_line(), blame.lines_in_hunk()));
+            }
+        }
+        println!("{:#?}", lines_changed_by_fixing_commit);
+
+        // Next for lines_changed_by_fixing_commit, do git blame on the parents
+    }
+
+    Ok(bug_inducing_commits)
+}
+
+fn _print_blame(blame: &git2::BlameHunk) {
+    println!(
+        "Blame: {}, startlines (o, f): {} {}; len: {}; boundary? {}; orig_commit_id {}",
+        blame.final_commit_id(),
+        blame.orig_start_line(),
+        blame.final_start_line(),
+        blame.lines_in_hunk(),
+        blame.is_boundary(),
+        blame.orig_commit_id()
+    );
 }
