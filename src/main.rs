@@ -2,7 +2,7 @@ use clap::{App, Arg, SubCommand};
 
 fn main() {
     let matches = App::new("Merge Finder")
-        .version("0.1.0")
+        .version("0.2.0")
         .author("Ward Muylaert <ward.muylaert@gmail.com>")
         .about("Find 3-way merges in a git repository.")
         .arg(
