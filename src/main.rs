@@ -53,6 +53,7 @@ fn main() {
             let mut f = File::open(commitfile).unwrap();
             f.read_to_string(&mut content).unwrap();
             content
+                .trim()
                 .split('\n')
                 .map(|line| line.trim().to_owned())
                 .collect()
@@ -61,11 +62,10 @@ fn main() {
             vec![]
         };
 
-        let mut result: Vec<String> = vec![];
         for commit in commitlist {
             match three_way_merge_finder::find_bug_fix::find_bug_fixing_commits(&repo, &commit) {
                 Ok(descendants) => {
-                    result.push(format!(
+                    println!(
                         "{},{},{},{}",
                         commit,
                         descendants
@@ -80,7 +80,7 @@ fn main() {
                             .get(2)
                             .map(|oid| oid.to_string())
                             .unwrap_or_default(),
-                    ));
+                    );
                 }
                 Err(e) => eprintln!(
                     "Failed to find bug fixing commit for {}.\nError: {}",
@@ -88,9 +88,6 @@ fn main() {
                 ),
             }
         }
-        let result = result.join("\n");
-        // TODO Write away result
-        println!("{}", result);
     } else {
         let revwalk =
             three_way_merge_finder::create_revwalk(&repo).expect("Could not create revwalk");
