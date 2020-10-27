@@ -151,9 +151,9 @@ impl ThreeWayMerge {
     }
 }
 
-/// For a given list of files, locates them in the commit and writes them into the provided
+/// For a given list of files, locates them in the given commit and writes them into the provided
 /// folder. The files are placed in subfolders mimicking their folders in the commit.
-fn write_files_from_commit_to_disk<P: AsRef<std::path::Path>>(
+pub fn write_files_from_commit_to_disk<P: AsRef<std::path::Path>>(
     folder: P,
     commit: git2::Oid,
     repo: &git2::Repository,

@@ -37,6 +37,12 @@ fn main() {
                 .help("File listing commits, one per line. For each of the commits, the tool will look for bug fixing commits. Results are written to a csv file. givencommit,bugfix1,bugfix2,bugfix3. Last three may be empty.")
                 .takes_value(true),
             )
+            .arg(
+                Arg::with_name("commitfolder")
+                .long("commitfolder")
+                .help("A folder that is the result of finding three way merges. Each of the subfolders represents a three way merge and is named by the hash of the merge commit. This name is used to find fixing descendants. Fixing descendants are added as subfolders of a three way merge folder, alongside the existing o, a, b, m folders.")
+                .takes_value(true),
+            )
         )
         .get_matches();
     let repopath = matches.value_of("GITREPO").unwrap();
@@ -46,23 +52,24 @@ fn main() {
     };
 
     if let Some(find_bug_fix_matches) = matches.subcommand_matches("find-bug-fix") {
-        let commitlist: Vec<_> = if let Some(commit) = find_bug_fix_matches.value_of("commit") {
-            vec![commit.to_owned()]
+        if let Some(commitfolder) = find_bug_fix_matches.value_of("commitfolder") {
+            three_way_merge_finder::publish::write_bug_fix_files(commitfolder, &repo);
+        } else if let Some(commit) = find_bug_fix_matches.value_of("commit") {
+            let commitlist = vec![commit.to_owned()];
+            three_way_merge_finder::publish::print_bug_fix_csv(&repo, &commitlist);
         } else if let Some(commitfile) = find_bug_fix_matches.value_of("commitlist") {
             let mut content = String::new();
             let mut f = File::open(commitfile).unwrap();
             f.read_to_string(&mut content).unwrap();
-            content
+            let commitlist: Vec<_> = content
                 .trim()
                 .split('\n')
                 .map(|line| line.trim().to_owned())
-                .collect()
+                .collect();
+            three_way_merge_finder::publish::print_bug_fix_csv(&repo, &commitlist);
         } else {
             eprintln!("Nothing to do");
-            vec![]
-        };
-
-        three_way_merge_finder::publish::print_bug_fix_csv(&repo, &commitlist);
+        }
     } else {
         let revwalk =
             three_way_merge_finder::create_revwalk(&repo).expect("Could not create revwalk");

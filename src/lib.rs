@@ -22,3 +22,5 @@ mod merge;
 pub mod debugging;
 
 pub mod find_bug_fix;
+
+mod relative_files;
