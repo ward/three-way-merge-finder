@@ -62,32 +62,7 @@ fn main() {
             vec![]
         };
 
-        for commit in commitlist {
-            match three_way_merge_finder::find_bug_fix::find_bug_fixing_commits(&repo, &commit) {
-                Ok(descendants) => {
-                    println!(
-                        "{},{},{},{}",
-                        commit,
-                        descendants
-                            .get(0)
-                            .map(|oid| oid.to_string())
-                            .unwrap_or_default(),
-                        descendants
-                            .get(1)
-                            .map(|oid| oid.to_string())
-                            .unwrap_or_default(),
-                        descendants
-                            .get(2)
-                            .map(|oid| oid.to_string())
-                            .unwrap_or_default(),
-                    );
-                }
-                Err(e) => eprintln!(
-                    "Failed to find bug fixing commit for {}.\nError: {}",
-                    commit, e
-                ),
-            }
-        }
+        three_way_merge_finder::publish::print_bug_fix_csv(&repo, &commitlist);
     } else {
         let revwalk =
             three_way_merge_finder::create_revwalk(&repo).expect("Could not create revwalk");

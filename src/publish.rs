@@ -38,3 +38,39 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
     // TODO? Create a csv file of all merges in the folder
     // TODO? Place detailed diff "overview" in a text file there
 }
+
+/// For every given broken commit, checks for fixing descendants and prints a line of the form
+///
+/// ```
+/// brokencommit,bugfix1,bugfix2,bugfix3
+/// ```
+///
+/// The latter three may not be present.
+pub fn print_bug_fix_csv(repo: &git2::Repository, broken_commit_list: &[String]) {
+    for commit in broken_commit_list {
+        match crate::find_bug_fix::find_bug_fixing_commits(&repo, &commit) {
+            Ok(descendants) => {
+                println!(
+                    "{},{},{},{}",
+                    commit,
+                    descendants
+                        .get(0)
+                        .map(|oid| oid.to_string())
+                        .unwrap_or_default(),
+                    descendants
+                        .get(1)
+                        .map(|oid| oid.to_string())
+                        .unwrap_or_default(),
+                    descendants
+                        .get(2)
+                        .map(|oid| oid.to_string())
+                        .unwrap_or_default(),
+                );
+            }
+            Err(e) => eprintln!(
+                "Failed to find bug fixing commit for {}.\nError: {}",
+                commit, e
+            ),
+        }
+    }
+}
