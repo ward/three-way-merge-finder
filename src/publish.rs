@@ -105,8 +105,8 @@ where
     for commit_folder in folder.read_dir().unwrap() {
         if let Ok(commit_folder) = commit_folder {
             let commit_folder = commit_folder.path();
-            if let Some(commitname) = commit_folder.file_name().and_then(|osstr| osstr.to_str()) {
-                match crate::find_bug_fix::find_bug_fixing_commits(&repo, &commitname) {
+            if let Some(commit_name) = commit_folder.file_name().and_then(|osstr| osstr.to_str()) {
+                match crate::find_bug_fix::find_bug_fixing_commits(&repo, &commit_name) {
                     Ok(descendants) => {
                         let files_to_consider: std::collections::HashSet<String> =
                             crate::relative_files::RelativeFiles::open(&commit_folder.join("m"))
@@ -121,13 +121,47 @@ where
                                 &files_to_consider,
                                 "BF1",
                             );
-                            // TODO check for bug_fix_2 and bug_fix_3, also print those
-                            println!("{},{}", commitname, bug_fix_1);
                         }
+                        if let Some(bug_fix_2) = descendants.get(1) {
+                            crate::merge::write_files_from_commit_to_disk(
+                                commit_folder.join("bf2"),
+                                *bug_fix_2,
+                                repo,
+                                &files_to_consider,
+                                "BF2",
+                            );
+                        }
+                        if let Some(bug_fix_3) = descendants.get(2) {
+                            crate::merge::write_files_from_commit_to_disk(
+                                commit_folder.join("bf3"),
+                                *bug_fix_3,
+                                repo,
+                                &files_to_consider,
+                                "BF3",
+                            );
+                        }
+
+                        // Output a CSV to STDOUT
+                        println!(
+                            "{},{},{},{}",
+                            commit_name,
+                            descendants
+                                .get(0)
+                                .map(|oid| oid.to_string())
+                                .unwrap_or_default(),
+                            descendants
+                                .get(1)
+                                .map(|oid| oid.to_string())
+                                .unwrap_or_default(),
+                            descendants
+                                .get(2)
+                                .map(|oid| oid.to_string())
+                                .unwrap_or_default(),
+                        );
                     }
                     Err(e) => eprintln!(
                         "Failed to find bug fixing commit for {}.\nError: {}",
-                        commitname, e
+                        commit_name, e
                     ),
                 }
             }
