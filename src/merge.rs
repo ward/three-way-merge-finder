@@ -166,7 +166,7 @@ pub fn write_files_from_commit_to_disk<P: AsRef<std::path::Path>>(
     for file in changed_files {
         let tree_entry = tree.get_path(&std::path::Path::new(&file));
         if tree_entry.is_err() {
-            println!(
+            eprintln!(
                 "File {} not present in {}. Skipping.",
                 &file, commit_description
             );

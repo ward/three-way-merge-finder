@@ -94,6 +94,9 @@ pub fn print_bug_fix_csv(repo: &git2::Repository, broken_commit_list: &[String])
 /// found, they are added as subfolders in that folder. The bug fix folder is thus a sibling to the
 /// existing o, a, b, m folders. Files present in m are used as the basis of what files to write
 /// out from the bug fixing commit.
+///
+/// If the folders already exist, the files it finds in this run will be overriden. Nothing else
+/// will be touched.
 pub fn write_bug_fix_files<P>(folder: P, repo: &git2::Repository)
 where
     P: AsRef<std::path::Path>,
@@ -111,10 +114,6 @@ where
                                 .flatten()
                                 .collect();
                         if let Some(bug_fix_1) = descendants.get(0) {
-                            // TODO Need to write to a file to describe bug_fix_1
-                            // Just taking output from another run might not be deterministic (i.e.
-                            // the topological children can, I think, be given in a different order
-                            // of the branches).
                             crate::merge::write_files_from_commit_to_disk(
                                 commit_folder.join("bf1"),
                                 *bug_fix_1,
@@ -122,6 +121,8 @@ where
                                 &files_to_consider,
                                 "BF1",
                             );
+                            // TODO check for bug_fix_2 and bug_fix_3, also print those
+                            println!("{},{}", commitname, bug_fix_1);
                         }
                     }
                     Err(e) => eprintln!(
