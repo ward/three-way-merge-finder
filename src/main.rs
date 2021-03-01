@@ -24,6 +24,11 @@ fn main() {
             .help("Specify a certain number of seconds since the UNIX epoch. Only merge commits made before this time will be used.")
             .takes_value(true)
         )
+        .arg(
+            Arg::with_name("all-files")
+                .long("all-files")
+                .help("Copy all files present in either O, A, B, or M of the three way merge, not just those present in each and changed")
+        )
         .subcommand(SubCommand::with_name("find-bug-fix")
             .arg(
                 Arg::with_name("commit")
@@ -77,9 +82,16 @@ fn main() {
         let before: Option<i64> = matches
             .value_of("before")
             .and_then(|before| before.parse().ok());
+        let all_files = matches.is_present("all-files");
 
         if let Some(output_folder) = output_folder {
-            three_way_merge_finder::publish::folder_dump(output_folder, &repo, revwalk, before);
+            three_way_merge_finder::publish::folder_dump(
+                output_folder,
+                &repo,
+                revwalk,
+                before,
+                all_files,
+            );
         } else {
             three_way_merge_finder::publish::print_csv_of_merges(&repo, revwalk, before);
         }

@@ -18,6 +18,7 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
     repo: &git2::Repository,
     revwalk: git2::Revwalk,
     before: Option<i64>,
+    all_files: bool,
 ) {
     let folder = folder.as_ref();
     // Create folder if needed and check it is empty
@@ -30,10 +31,17 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
     let merges = super::merge::find_merges(repo, revwalk, before);
 
     // Create merge-hash folder and its o, a, b, and m subfolders.
-    for merge in merges {
-        let files = merge.files_to_consider(&repo);
-        let merge_path = folder.join(merge.m.to_string());
-        merge.write_files_to_disk(&merge_path, files, &repo);
+    if all_files {
+        for merge in merges {
+            let merge_path = folder.join(merge.m.to_string());
+            merge.write_all_files_to_disk(merge_path, &repo);
+        }
+    } else {
+        for merge in merges {
+            let files = merge.files_to_consider(&repo);
+            let merge_path = folder.join(merge.m.to_string());
+            merge.write_files_to_disk(&merge_path, files, &repo);
+        }
     }
     // TODO? Create a csv file of all merges in the folder
     // TODO? Place detailed diff "overview" in a text file there
