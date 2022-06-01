@@ -22,6 +22,8 @@ pub fn find_merges(
             }
         })
         .map(|commit| {
+            // Parent order is deterministic and saved as part of the merge commit. Subsequent runs
+            // will thus give the same parents for each position.
             let parent1 = commit
                 .parent_id(0)
                 .expect("Failed to get id for first parent.");
@@ -46,8 +48,8 @@ pub fn find_merges(
                 }
             }
         })
-        .filter(|twm| twm.is_some())
-        .map(|twm| twm.unwrap())
+        // flatten filters None out and unwraps Some
+        .flatten()
         .collect()
 }
 
@@ -182,6 +184,13 @@ impl ThreeWayMerge {
             .expect("Failed to find merge commit")
             .time()
             .seconds()
+    }
+
+    /// Check whether O is a different commit than A or B. If it is the same as either, then we're
+    /// not *really* working with a twm, but more the joining of a PR to an unchanged master
+    /// branch. In other words, no changes on the other side.
+    pub fn has_distinct_o(&self) -> bool {
+        self.o != self.a && self.o != self.b
     }
 }
 

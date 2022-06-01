@@ -1,9 +1,17 @@
-//! Used to actually get results and print them. Makes use to the [merge](crate::merge) module.
+//! Used to actually get results and print them. Makes use of the [merge](crate::merge) module.
 
-pub fn print_csv_of_merges(repo: &git2::Repository, revwalk: git2::Revwalk, before: Option<i64>) {
+pub fn print_csv_of_merges(
+    repo: &git2::Repository,
+    revwalk: git2::Revwalk,
+    before: Option<i64>,
+    distinct_o: bool,
+) {
     let merges = super::merge::find_merges(repo, revwalk, before);
     println!("O,A,B,M,changed_files,timestamp");
     for merge in merges {
+        if distinct_o && !merge.has_distinct_o() {
+            continue;
+        }
         let file_count = merge.files_to_consider(repo).len();
         println!(
             "{},{},{}",
@@ -25,6 +33,7 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
     revwalk: git2::Revwalk,
     before: Option<i64>,
     all_files: bool,
+    distinct_o: bool,
 ) {
     let folder = folder.as_ref();
     // Create folder if needed and check it is empty
@@ -39,11 +48,17 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
     // Create merge-hash folder and its o, a, b, and m subfolders.
     if all_files {
         for merge in merges {
+            if distinct_o && !merge.has_distinct_o() {
+                continue;
+            }
             let merge_path = folder.join(merge.m.to_string());
             merge.write_all_files_to_disk(merge_path, &repo);
         }
     } else {
         for merge in merges {
+            if distinct_o && !merge.has_distinct_o() {
+                continue;
+            }
             let files = merge.files_to_consider(&repo);
             let merge_path = folder.join(merge.m.to_string());
             merge.write_files_to_disk(&merge_path, files, &repo);

@@ -25,6 +25,12 @@ fn main() {
             .takes_value(true)
         )
         .arg(
+            Arg::with_name("distinct-o")
+            .long("distinct-o")
+            .help("Avoid merges where O is the same commit as A (or the same commit as B). These are trivial merges.")
+            .takes_value(false)
+        )
+        .arg(
             Arg::with_name("all-files")
                 .long("all-files")
                 .help("Copy all files present in either O, A, B, or M of the three way merge, not just those present in each and changed")
@@ -83,6 +89,7 @@ fn main() {
             .value_of("before")
             .and_then(|before| before.parse().ok());
         let all_files = matches.is_present("all-files");
+        let distinct_o = matches.is_present("distinct-o");
 
         if let Some(output_folder) = output_folder {
             three_way_merge_finder::publish::folder_dump(
@@ -91,9 +98,12 @@ fn main() {
                 revwalk,
                 before,
                 all_files,
+                distinct_o,
             );
         } else {
-            three_way_merge_finder::publish::print_csv_of_merges(&repo, revwalk, before);
+            three_way_merge_finder::publish::print_csv_of_merges(
+                &repo, revwalk, before, distinct_o,
+            );
         }
     }
 }
