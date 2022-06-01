@@ -2,9 +2,15 @@
 
 pub fn print_csv_of_merges(repo: &git2::Repository, revwalk: git2::Revwalk, before: Option<i64>) {
     let merges = super::merge::find_merges(repo, revwalk, before);
-    println!("O,A,B,M");
+    println!("O,A,B,M,changed_files,timestamp");
     for merge in merges {
-        println!("{},{}", merge.to_csv_line(), merge.time(repo));
+        let file_count = merge.files_to_consider(repo).len();
+        println!(
+            "{},{},{}",
+            merge.to_csv_line(),
+            file_count,
+            merge.time(repo)
+        );
     }
 }
 
