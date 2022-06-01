@@ -1,55 +1,55 @@
-use clap::{App, Arg, SubCommand};
+use clap::{Command, Arg};
 use std::fs::File;
 use std::io::prelude::*;
 
 fn main() {
-    let matches = App::new("Merge Finder")
+    let matches = Command::new("Merge Finder")
         .version("0.3.0")
         .author("Ward Muylaert <ward.muylaert@gmail.com>")
         .about("Find 3-way merges in a git repository.")
         .arg(
-            Arg::with_name("GITREPO")
+            Arg::new("GITREPO")
                 .help("Give the path of an existing local git repository.")
                 .required(true),
         )
         .arg(
-            Arg::with_name("output-folder")
+            Arg::new("output-folder")
                 .long("output-folder")
                 .help("Specify a folder in which to place the details of merges. This information will not be produced if this parameter is not present.")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name("before")
+            Arg::new("before")
             .long("before")
             .help("Specify a certain number of seconds since the UNIX epoch. Only merge commits made before this time will be used.")
             .takes_value(true)
         )
         .arg(
-            Arg::with_name("distinct-o")
+            Arg::new("distinct-o")
             .long("distinct-o")
             .help("Avoid merges where O is the same commit as A (or the same commit as B). These are trivial merges.")
             .takes_value(false)
         )
         .arg(
-            Arg::with_name("all-files")
+            Arg::new("all-files")
                 .long("all-files")
                 .help("Copy all files present in either O, A, B, or M of the three way merge, not just those present in each and changed")
         )
-        .subcommand(SubCommand::with_name("find-bug-fix")
+        .subcommand(Command::new("find-bug-fix")
             .arg(
-                Arg::with_name("commit")
+                Arg::new("commit")
                 .long("commit")
                 .help("Commit for which to find bug fixing commit. Results in a csv file like for --commitlist.")
                 .takes_value(true),
             )
             .arg(
-                Arg::with_name("commitlist")
+                Arg::new("commitlist")
                 .long("commitlist")
                 .help("File listing commits, one per line. For each of the commits, the tool will look for bug fixing commits. Results are written to a csv file. givencommit,bugfix1,bugfix2,bugfix3. Last three may be empty.")
                 .takes_value(true),
             )
             .arg(
-                Arg::with_name("commitfolder")
+                Arg::new("commitfolder")
                 .long("commitfolder")
                 .help("A folder that is the result of finding three way merges. Each of the subfolders represents a three way merge and is named by the hash of the merge commit. This name is used to find fixing descendants. Fixing descendants are added as subfolders of a three way merge folder, alongside the existing o, a, b, m folders.")
                 .takes_value(true),

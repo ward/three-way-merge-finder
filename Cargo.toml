@@ -2,12 +2,12 @@
 name = "three-way-merge-finder"
 version = "0.3.0"
 authors = ["Ward Muylaert <ward.muylaert@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-git2 = "0.13"
-clap = "2"
-regex = "1.4.1"
-lazy_static = "1.4.0"
+git2 = "0.14"
+clap = "3.1"
+regex = "1.5"
+lazy_static = "1.4"
