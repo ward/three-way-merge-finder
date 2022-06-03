@@ -1,4 +1,4 @@
-use clap::{Command, Arg};
+use clap::{Arg, Command};
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -37,15 +37,9 @@ fn main() {
         )
         .subcommand(Command::new("find-bug-fix")
             .arg(
-                Arg::new("commit")
-                .long("commit")
-                .help("Commit for which to find bug fixing commit. Results in a csv file like for --commitlist.")
-                .takes_value(true),
-            )
-            .arg(
                 Arg::new("commitlist")
                 .long("commitlist")
-                .help("File listing commits, one per line. For each of the commits, the tool will look for bug fixing commits. Results are written to a csv file. givencommit,bugfix1,bugfix2,bugfix3. Last three may be empty.")
+                .help("File listing merge commits, as created by this tool. For each of the merge commits, the tool will look for bug fixing commits. Results are written to a csv file. givencommit,bugfix1,bugfix2,bugfix3. Last three may be empty.")
                 .takes_value(true),
             )
             .arg(
@@ -65,9 +59,6 @@ fn main() {
     if let Some(find_bug_fix_matches) = matches.subcommand_matches("find-bug-fix") {
         if let Some(commitfolder) = find_bug_fix_matches.value_of("commitfolder") {
             three_way_merge_finder::publish::write_bug_fix_files(commitfolder, &repo);
-        } else if let Some(commit) = find_bug_fix_matches.value_of("commit") {
-            let commitlist = vec![commit.to_owned()];
-            three_way_merge_finder::publish::print_bug_fix_csv(&repo, &commitlist);
         } else if let Some(commitfile) = find_bug_fix_matches.value_of("commitlist") {
             let mut content = String::new();
             let mut f = File::open(commitfile).unwrap();
@@ -75,7 +66,13 @@ fn main() {
             let commitlist: Vec<_> = content
                 .trim()
                 .split('\n')
-                .map(|line| line.trim().to_owned())
+                .map(|line| {
+                    let mut split_line = line.trim().split(',');
+                    (
+                        split_line.nth(0).expect("Should be an O commit").to_owned(),
+                        split_line.nth(2).expect("Should be an M commit").to_owned(),
+                    )
+                })
                 .collect();
             three_way_merge_finder::publish::print_bug_fix_csv(&repo, &commitlist);
         } else {

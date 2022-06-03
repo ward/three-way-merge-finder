@@ -125,11 +125,11 @@ fn get_descendants(
     let mut descendants: Vec<git2::Oid> = Vec::new();
     descendants.push(ancestor);
 
-    let mut revwalk = repo.revwalk().unwrap();
-    revwalk.push_head().unwrap();
+    let mut revwalk = repo.revwalk()?;
+    revwalk.push_head()?;
     let mut sorting = git2::Sort::TOPOLOGICAL;
     sorting.insert(git2::Sort::REVERSE);
-    revwalk.set_sorting(sorting).unwrap();
+    revwalk.set_sorting(sorting)?;
 
     for oid in revwalk {
         let oid = oid.unwrap();
@@ -148,6 +148,71 @@ fn get_descendants(
     descendants.remove(0);
 
     Ok(descendants)
+}
+
+/// Since we are not keeping track of the parent relation when getting descendants, we need to
+/// essentially redo that check. Given a commit, take the parents up to n time and see if any
+/// equals the given root.
+pub fn within_n_generations(
+    repo: &git2::Repository,
+    root: &git2::Oid,
+    child: &git2::Oid,
+    n: usize,
+) -> bool {
+    let child = repo.find_commit(*child).unwrap();
+    let mut children = vec![child];
+    for _ in 0..n {
+        let mut ancestors = vec![];
+        for child in children {
+            for ancestor in child.parents() {
+                if root == &ancestor.id() {
+                    return true;
+                }
+                ancestors.push(ancestor);
+            }
+        }
+        children = ancestors;
+    }
+    false
+}
+
+/// Given two commits (well, Oids), does a diff and returns the changed files.
+pub fn changed_filenames(
+    repo: &git2::Repository,
+    old: &git2::Oid,
+    new: &git2::Oid,
+) -> std::collections::HashSet<String> {
+    let mut diffoptions = git2::DiffOptions::new();
+    diffoptions.minimal(true).ignore_whitespace(true);
+    let old = repo.find_commit(*old).expect("Failed to find old commit");
+    let old_tree = old.tree().expect("Failed to find tree for old commit");
+    let new = repo.find_commit(*new).expect("Failed to find new commit");
+    let new_tree = new.tree().expect("Failed to find tree for new commit");
+    let diff = repo
+        .diff_tree_to_tree(Some(&old_tree), Some(&new_tree), Some(&mut diffoptions))
+        .expect("Should be able to diff old to new");
+    let mut paths = std::collections::HashSet::new();
+    for delta in diff.deltas() {
+        paths.insert(
+            delta
+                .old_file()
+                .path()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_owned(),
+        );
+        paths.insert(
+            delta
+                .new_file()
+                .path()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_owned(),
+        );
+    }
+    paths
 }
 
 fn _print_oids(repo: &git2::Repository, oids: &[git2::Oid]) {

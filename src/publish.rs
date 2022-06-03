@@ -75,13 +75,55 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
 /// ```
 ///
 /// The latter three may not be present.
-pub fn print_bug_fix_csv(repo: &git2::Repository, broken_commit_list: &[String]) {
+pub fn print_bug_fix_csv(repo: &git2::Repository, broken_commit_list: &[(String, String)]) {
     for commit in broken_commit_list {
-        match crate::find_bug_fix::find_bug_fixing_commits(&repo, &commit) {
+        let (o_commit, m_commit) = commit;
+        let o_commit_oid = git2::Oid::from_str(o_commit).unwrap();
+        let m_commit_oid = git2::Oid::from_str(m_commit).unwrap();
+        match crate::find_bug_fix::find_bug_fixing_commits(&repo, &m_commit) {
             Ok(descendants) => {
+                let descendants: Vec<_> = descendants
+                    .iter()
+                    .filter(|child| {
+                        // Only keep descendants if they occur within 10 steps of the merge
+                        crate::find_bug_fix::within_n_generations(repo, &m_commit_oid, child, 10)
+                    })
+                    // Also want to filter based on overlapping files. Blames might be too selective
+                    // since we are hoping for semantic stuff. Heck, overlapping files might be too
+                    // selective but here we are. Downside: need the O information for that. So either
+                    // recalc that here or adjust code to be able to use our OABM output instead.
+                    // Leaning towards the latter since that is how we get our merges to begin with
+                    // anyway.
+                    // Also only keeping java files
+                    .filter(|child| {
+                        // Consider all changes between O and M
+                        let o_to_m = crate::find_bug_fix::changed_filenames(
+                            repo,
+                            &o_commit_oid,
+                            &m_commit_oid,
+                        )
+                        .into_iter()
+                        .filter(|filename| filename.ends_with(".java"))
+                        .collect::<std::collections::HashSet<_>>();
+
+                        // Consider the changes made by the bug fixing commit
+                        let child_commit = repo.find_commit(**child).unwrap();
+                        if child_commit.parent_count() != 1 {
+                            return false;
+                        }
+                        let bfc_parent = child_commit.parent_id(0).unwrap();
+                        let bfc_changes =
+                            crate::find_bug_fix::changed_filenames(repo, &bfc_parent, child)
+                                .into_iter()
+                                .filter(|filename| filename.ends_with(".java"))
+                                .collect::<std::collections::HashSet<_>>();
+
+                        !o_to_m.is_disjoint(&bfc_changes)
+                    })
+                    .collect();
                 println!(
                     "{},{},{},{}",
-                    commit,
+                    m_commit,
                     descendants
                         .get(0)
                         .map(|oid| oid.to_string())
@@ -98,7 +140,7 @@ pub fn print_bug_fix_csv(repo: &git2::Repository, broken_commit_list: &[String])
             }
             Err(e) => eprintln!(
                 "Failed to find bug fixing commit for {}.\nError: {}",
-                commit, e
+                m_commit, e
             ),
         }
     }
