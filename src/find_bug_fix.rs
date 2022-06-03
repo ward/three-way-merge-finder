@@ -157,7 +157,7 @@ pub fn within_n_generations(
     repo: &git2::Repository,
     root: &git2::Oid,
     child: &git2::Oid,
-    n: usize,
+    n: u32,
 ) -> bool {
     let child = repo.find_commit(*child).unwrap();
     let mut children = vec![child];

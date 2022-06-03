@@ -48,6 +48,13 @@ fn main() {
                 .help("A folder that is the result of finding three way merges. Each of the subfolders represents a three way merge and is named by the hash of the merge commit. This name is used to find fixing descendants. Fixing descendants are added as subfolders of a three way merge folder, alongside the existing o, a, b, m folders.")
                 .takes_value(true),
             )
+            .arg(
+                Arg::new("fix-distance")
+                .long("fix-distance")
+                .help("Specify how 'far' away the fix can be from the merge. This is done in terms of the number of children. Currently only applies to --commitlist.")
+                .takes_value(true)
+                .default_value("10")
+            )
         )
         .get_matches();
     let repopath = matches.value_of("GITREPO").unwrap();
@@ -60,6 +67,13 @@ fn main() {
         if let Some(commitfolder) = find_bug_fix_matches.value_of("commitfolder") {
             three_way_merge_finder::publish::write_bug_fix_files(commitfolder, &repo);
         } else if let Some(commitfile) = find_bug_fix_matches.value_of("commitlist") {
+            let fix_distance: u32 = find_bug_fix_matches
+                .value_of("fix-distance")
+                .unwrap()
+                .parse()
+                .unwrap();
+
+            // Read in the commitlist file
             let mut content = String::new();
             let mut f = File::open(commitfile).unwrap();
             f.read_to_string(&mut content).unwrap();
@@ -74,7 +88,8 @@ fn main() {
                     )
                 })
                 .collect();
-            three_way_merge_finder::publish::print_bug_fix_csv(&repo, &commitlist);
+
+            three_way_merge_finder::publish::print_bug_fix_csv(&repo, &commitlist, fix_distance);
         } else {
             eprintln!("Nothing to do");
         }

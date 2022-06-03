@@ -75,7 +75,11 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
 /// ```
 ///
 /// The latter three may not be present.
-pub fn print_bug_fix_csv(repo: &git2::Repository, broken_commit_list: &[(String, String)]) {
+pub fn print_bug_fix_csv(
+    repo: &git2::Repository,
+    broken_commit_list: &[(String, String)],
+    fix_distance: u32,
+) {
     for commit in broken_commit_list {
         let (o_commit, m_commit) = commit;
         let o_commit_oid = git2::Oid::from_str(o_commit).unwrap();
@@ -85,8 +89,13 @@ pub fn print_bug_fix_csv(repo: &git2::Repository, broken_commit_list: &[(String,
                 let descendants: Vec<_> = descendants
                     .iter()
                     .filter(|child| {
-                        // Only keep descendants if they occur within 10 steps of the merge
-                        crate::find_bug_fix::within_n_generations(repo, &m_commit_oid, child, 10)
+                        // Only keep descendants if they occur within fix_distance steps of the merge
+                        crate::find_bug_fix::within_n_generations(
+                            repo,
+                            &m_commit_oid,
+                            child,
+                            fix_distance,
+                        )
                     })
                     // Also want to filter based on overlapping files. Blames might be too selective
                     // since we are hoping for semantic stuff. Heck, overlapping files might be too
