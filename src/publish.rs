@@ -90,7 +90,7 @@ pub fn print_bug_fix_csv(
                     .iter()
                     .filter(|child| {
                         // Only keep descendants if they occur within fix_distance steps of the merge
-                        crate::find_bug_fix::within_n_generations(
+                        crate::git_utils::within_n_generations(
                             repo,
                             &m_commit_oid,
                             child,
@@ -106,14 +106,11 @@ pub fn print_bug_fix_csv(
                     // Also only keeping java files
                     .filter(|child| {
                         // Consider all changes between O and M
-                        let o_to_m = crate::find_bug_fix::changed_filenames(
-                            repo,
-                            &o_commit_oid,
-                            &m_commit_oid,
-                        )
-                        .into_iter()
-                        .filter(|filename| filename.ends_with(".java"))
-                        .collect::<std::collections::HashSet<_>>();
+                        let o_to_m =
+                            crate::git_utils::changed_filenames(repo, &o_commit_oid, &m_commit_oid)
+                                .into_iter()
+                                .filter(|filename| filename.ends_with(".java"))
+                                .collect::<std::collections::HashSet<_>>();
 
                         // Consider the changes made by the bug fixing commit
                         let child_commit = repo.find_commit(**child).unwrap();
@@ -122,7 +119,7 @@ pub fn print_bug_fix_csv(
                         }
                         let bfc_parent = child_commit.parent_id(0).unwrap();
                         let bfc_changes =
-                            crate::find_bug_fix::changed_filenames(repo, &bfc_parent, child)
+                            crate::git_utils::changed_filenames(repo, &bfc_parent, child)
                                 .into_iter()
                                 .filter(|filename| filename.ends_with(".java"))
                                 .collect::<std::collections::HashSet<_>>();

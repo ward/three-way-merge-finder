@@ -6,15 +6,6 @@
 #[macro_use]
 extern crate lazy_static;
 
-/// Creates a toplogical revwalk over a repository, starting at HEAD.
-pub fn create_revwalk(repo: &git2::Repository) -> Result<git2::Revwalk, git2::Error> {
-    let mut revwalk = repo.revwalk()?;
-    // Pushing marks a commit to start traversal from
-    revwalk.push_head()?;
-    revwalk.set_sorting(git2::Sort::TOPOLOGICAL)?;
-    Ok(revwalk)
-}
-
 pub mod publish;
 
 mod merge;
@@ -22,5 +13,7 @@ mod merge;
 pub mod debugging;
 
 pub mod find_bug_fix;
+
+pub mod git_utils;
 
 mod relative_files;

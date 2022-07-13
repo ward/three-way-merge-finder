@@ -94,8 +94,8 @@ fn main() {
             eprintln!("Nothing to do");
         }
     } else {
-        let revwalk =
-            three_way_merge_finder::create_revwalk(&repo).expect("Could not create revwalk");
+        let revwalk = three_way_merge_finder::git_utils::create_revwalk(&repo)
+            .expect("Could not create revwalk");
         let output_folder = matches.value_of("output-folder");
         let before: Option<i64> = matches
             .value_of("before")
