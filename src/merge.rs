@@ -192,6 +192,21 @@ impl ThreeWayMerge {
     pub fn has_distinct_o(&self) -> bool {
         self.o != self.a && self.o != self.b
     }
+
+    pub fn a_b_change_same_file(
+        &self,
+        repo: &git2::Repository,
+        only_extensions: &Vec<&str>,
+    ) -> bool {
+        crate::git_utils::changed_same_file(
+            repo,
+            &self.o,
+            &self.a,
+            &self.o,
+            &self.b,
+            only_extensions,
+        )
+    }
 }
 
 /// Recursive monstrosity to find all the paths in a commit's tree. Maybe I'm missing something

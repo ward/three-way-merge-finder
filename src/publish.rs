@@ -5,11 +5,16 @@ pub fn print_csv_of_merges(
     revwalk: git2::Revwalk,
     before: Option<i64>,
     distinct_o: bool,
+    should_touch_same_file: bool,
 ) {
     let merges = super::merge::find_merges(repo, revwalk, before);
     println!("O,A,B,M,changed_files,timestamp");
+    let java_extensions = vec![".java"];
     for merge in merges {
         if distinct_o && !merge.has_distinct_o() {
+            continue;
+        }
+        if should_touch_same_file && !merge.a_b_change_same_file(repo, &java_extensions) {
             continue;
         }
         let file_count = merge.files_to_consider(repo).len();
@@ -105,26 +110,20 @@ pub fn print_bug_fix_csv(
                     // anyway.
                     // Also only keeping java files
                     .filter(|child| {
-                        // Consider all changes between O and M
-                        let o_to_m =
-                            crate::git_utils::changed_filenames(repo, &o_commit_oid, &m_commit_oid)
-                                .into_iter()
-                                .filter(|filename| filename.ends_with(".java"))
-                                .collect::<std::collections::HashSet<_>>();
-
-                        // Consider the changes made by the bug fixing commit
                         let child_commit = repo.find_commit(**child).unwrap();
                         if child_commit.parent_count() != 1 {
                             return false;
                         }
                         let bfc_parent = child_commit.parent_id(0).unwrap();
-                        let bfc_changes =
-                            crate::git_utils::changed_filenames(repo, &bfc_parent, child)
-                                .into_iter()
-                                .filter(|filename| filename.ends_with(".java"))
-                                .collect::<std::collections::HashSet<_>>();
 
-                        !o_to_m.is_disjoint(&bfc_changes)
+                        crate::git_utils::changed_same_file(
+                            repo,
+                            &o_commit_oid,
+                            &m_commit_oid,
+                            &bfc_parent,
+                            child,
+                            &vec![".java"],
+                        )
                     })
                     .collect();
                 println!(

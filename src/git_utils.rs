@@ -46,6 +46,30 @@ pub fn changed_filenames(
     paths
 }
 
+/// Checks whether Δ1 and Δ2 have at least one file they both changed. You may provide a list of
+/// extensions to only consider files ending in those. Empty list of extensions means all files are
+/// considered.
+pub fn changed_same_file(
+    repo: &git2::Repository,
+    commit1_old: &git2::Oid,
+    commit1_new: &git2::Oid,
+    commit2_old: &git2::Oid,
+    commit2_new: &git2::Oid,
+    only_extensions: &Vec<&str>,
+) -> bool {
+    let commit1_files: std::collections::HashSet<_> =
+        changed_filenames(repo, commit1_old, commit1_new)
+            .into_iter()
+            .filter(|filename| only_extensions.iter().any(|ext| filename.ends_with(ext)))
+            .collect();
+    let commit2_files: std::collections::HashSet<_> =
+        changed_filenames(repo, commit2_old, commit2_new)
+            .into_iter()
+            .filter(|filename| only_extensions.iter().any(|ext| filename.ends_with(ext)))
+            .collect();
+    !commit1_files.is_disjoint(&commit2_files)
+}
+
 /// Since we are not keeping track of the parent relation when getting descendants, we need to
 /// essentially redo that check. Given a commit, take the parents up to n time and see if any
 /// equals the given root. An `n` of 1 here means the direct child.

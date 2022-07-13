@@ -31,6 +31,12 @@ fn main() {
             .takes_value(false)
         )
         .arg(
+            Arg::new("touches-same-file")
+            .long("touches-same-file")
+            .help("Only find merges where A and B have changed the same file at least once.")
+            .takes_value(false)
+        )
+        .arg(
             Arg::new("all-files")
                 .long("all-files")
                 .help("Copy all files present in either O, A, B, or M of the three way merge, not just those present in each and changed")
@@ -102,6 +108,7 @@ fn main() {
             .and_then(|before| before.parse().ok());
         let all_files = matches.is_present("all-files");
         let distinct_o = matches.is_present("distinct-o");
+        let touches_same_file = matches.is_present("touches-same-file");
 
         if let Some(output_folder) = output_folder {
             three_way_merge_finder::publish::folder_dump(
@@ -114,7 +121,11 @@ fn main() {
             );
         } else {
             three_way_merge_finder::publish::print_csv_of_merges(
-                &repo, revwalk, before, distinct_o,
+                &repo,
+                revwalk,
+                before,
+                distinct_o,
+                touches_same_file,
             );
         }
     }
