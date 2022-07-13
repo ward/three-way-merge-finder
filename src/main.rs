@@ -4,7 +4,7 @@ use std::io::prelude::*;
 
 fn main() {
     let matches = Command::new("Merge Finder")
-        .version("0.3.0")
+        .version("0.4.0")
         .author("Ward Muylaert <ward.muylaert@gmail.com>")
         .about("Find 3-way merges in a git repository.")
         .arg(
