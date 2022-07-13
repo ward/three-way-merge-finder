@@ -86,11 +86,14 @@ fn main() {
             let commitlist: Vec<_> = content
                 .trim()
                 .split('\n')
+                .filter(|line| !line.is_empty())
                 .map(|line| {
                     let mut split_line = line.trim().split(',');
                     (
-                        split_line.nth(0).expect("Should be an O commit").to_owned(),
-                        split_line.nth(2).expect("Should be an M commit").to_owned(),
+                        split_line.next().expect("Should be an O commit").to_owned(),
+                        split_line.next().expect("Should be an A commit").to_owned(),
+                        split_line.next().expect("Should be an B commit").to_owned(),
+                        split_line.next().expect("Should be an M commit").to_owned(),
                     )
                 })
                 .collect();

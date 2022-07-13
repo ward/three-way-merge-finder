@@ -1,4 +1,8 @@
-//! Used to actually get results and print them. Makes use of the [merge](crate::merge) module.
+//! Used to actually get results and print them.
+
+use crate::git_utils;
+use crate::merge;
+use std::collections::HashSet;
 
 pub fn print_csv_of_merges(
     repo: &git2::Repository,
@@ -7,7 +11,7 @@ pub fn print_csv_of_merges(
     distinct_o: bool,
     should_touch_same_file: bool,
 ) {
-    let merges = super::merge::find_merges(repo, revwalk, before);
+    let merges = merge::find_merges(repo, revwalk, before);
     println!("O,A,B,M,changed_files,timestamp");
     let java_extensions = vec![".java"];
     for merge in merges {
@@ -48,7 +52,7 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
         panic!("Specified output-folder is not empty. Aborting.");
     }
 
-    let merges = super::merge::find_merges(repo, revwalk, before);
+    let merges = merge::find_merges(repo, revwalk, before);
 
     // Create merge-hash folder and its o, a, b, and m subfolders.
     if all_files {
@@ -79,28 +83,32 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
 /// brokencommit,bugfix1,bugfix2,bugfix3
 /// ```
 ///
-/// The latter three may not be present.
+/// The latter three may be empty.
 pub fn print_bug_fix_csv(
     repo: &git2::Repository,
-    broken_commit_list: &[(String, String)],
+    broken_commit_list: &[(String, String, String, String)],
     fix_distance: u32,
 ) {
     for commit in broken_commit_list {
-        let (o_commit, m_commit) = commit;
+        let (o_commit, a_commit, b_commit, m_commit) = commit;
         let o_commit_oid = git2::Oid::from_str(o_commit).unwrap();
+        let a_commit_oid = git2::Oid::from_str(a_commit).unwrap();
+        let b_commit_oid = git2::Oid::from_str(b_commit).unwrap();
         let m_commit_oid = git2::Oid::from_str(m_commit).unwrap();
+        let o_to_a = git_utils::changed_filenames(repo, &o_commit_oid, &a_commit_oid);
+        let o_to_b = git_utils::changed_filenames(repo, &o_commit_oid, &b_commit_oid);
+        let merge_changes: HashSet<_> = o_to_a
+            .intersection(&o_to_b)
+            // Need to get to_owned to get intersection working later...
+            .map(|filename| filename.to_owned())
+            .collect();
         match crate::find_bug_fix::find_bug_fixing_commits(&repo, &m_commit) {
             Ok(descendants) => {
                 let descendants: Vec<_> = descendants
                     .iter()
                     .filter(|child| {
                         // Only keep descendants if they occur within fix_distance steps of the merge
-                        crate::git_utils::within_n_generations(
-                            repo,
-                            &m_commit_oid,
-                            child,
-                            fix_distance,
-                        )
+                        git_utils::within_n_generations(repo, &m_commit_oid, child, fix_distance)
                     })
                     // Also want to filter based on overlapping files. Blames might be too selective
                     // since we are hoping for semantic stuff. Heck, overlapping files might be too
@@ -116,14 +124,10 @@ pub fn print_bug_fix_csv(
                         }
                         let bfc_parent = child_commit.parent_id(0).unwrap();
 
-                        crate::git_utils::changed_same_file(
-                            repo,
-                            &o_commit_oid,
-                            &m_commit_oid,
-                            &bfc_parent,
-                            child,
-                            &vec![".java"],
-                        )
+                        // First only compared O to M with parent to bugfix. Changed it to O to A
+                        // AND O to B AND bugfix to its parent.
+                        let bugfix_changes = git_utils::changed_filenames(repo, &bfc_parent, child);
+                        merge_changes.intersection(&bugfix_changes).next().is_some()
                     })
                     .collect();
                 println!(
@@ -184,13 +188,13 @@ where
             if let Some(commit_name) = commit_folder.file_name().and_then(|osstr| osstr.to_str()) {
                 match crate::find_bug_fix::find_bug_fixing_commits(&repo, &commit_name) {
                     Ok(descendants) => {
-                        let files_to_consider: std::collections::HashSet<String> =
+                        let files_to_consider: HashSet<String> =
                             crate::relative_files::RelativeFiles::open(&commit_folder.join("m"))
                                 .map(|path| path.to_str().map(|s| s.to_owned()))
                                 .flatten()
                                 .collect();
                         if let Some(bug_fix_1) = descendants.get(0) {
-                            crate::merge::write_files_from_commit_to_disk(
+                            merge::write_files_from_commit_to_disk(
                                 commit_folder.join("bf1"),
                                 *bug_fix_1,
                                 repo,
@@ -199,7 +203,7 @@ where
                             );
                         }
                         if let Some(bug_fix_2) = descendants.get(1) {
-                            crate::merge::write_files_from_commit_to_disk(
+                            merge::write_files_from_commit_to_disk(
                                 commit_folder.join("bf2"),
                                 *bug_fix_2,
                                 repo,
@@ -208,7 +212,7 @@ where
                             );
                         }
                         if let Some(bug_fix_3) = descendants.get(2) {
-                            crate::merge::write_files_from_commit_to_disk(
+                            merge::write_files_from_commit_to_disk(
                                 commit_folder.join("bf3"),
                                 *bug_fix_3,
                                 repo,
