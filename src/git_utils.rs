@@ -1,5 +1,7 @@
+use git2::{Oid, Repository, Revwalk};
+
 /// Creates a toplogical revwalk over a repository, starting at HEAD.
-pub fn create_revwalk(repo: &git2::Repository) -> Result<git2::Revwalk, git2::Error> {
+pub fn create_revwalk(repo: &Repository) -> Result<Revwalk, git2::Error> {
     let mut revwalk = repo.revwalk()?;
     // Pushing marks a commit to start traversal from
     revwalk.push_head()?;
@@ -7,21 +9,29 @@ pub fn create_revwalk(repo: &git2::Repository) -> Result<git2::Revwalk, git2::Er
     Ok(revwalk)
 }
 
-/// Given two commits (well, Oids), does a diff and returns the changed files.
-pub fn changed_filenames(
-    repo: &git2::Repository,
-    old: &git2::Oid,
-    new: &git2::Oid,
-) -> std::collections::HashSet<String> {
+/// Given two Oids, finds the commits, their trees, diffs the trees. Panic if Oid is not a commit
+/// or if no tree is found.
+fn diff_commits<'a>(
+    repo: &'a Repository,
+    old: &'a Oid,
+    new: &'a Oid,
+) -> Result<git2::Diff<'a>, git2::Error> {
     let mut diffoptions = git2::DiffOptions::new();
     diffoptions.minimal(true).ignore_whitespace(true);
-    let old = repo.find_commit(*old).expect("Failed to find old commit");
-    let old_tree = old.tree().expect("Failed to find tree for old commit");
-    let new = repo.find_commit(*new).expect("Failed to find new commit");
-    let new_tree = new.tree().expect("Failed to find tree for new commit");
-    let diff = repo
-        .diff_tree_to_tree(Some(&old_tree), Some(&new_tree), Some(&mut diffoptions))
-        .expect("Should be able to diff old to new");
+    let old = repo.find_commit(*old)?;
+    let old_tree = old.tree()?;
+    let new = repo.find_commit(*new)?;
+    let new_tree = new.tree()?;
+    repo.diff_tree_to_tree(Some(&old_tree), Some(&new_tree), Some(&mut diffoptions))
+}
+
+/// Given two commits (well, Oids), does a diff and returns the changed files.
+pub fn changed_filenames(
+    repo: &Repository,
+    old: &Oid,
+    new: &Oid,
+) -> std::collections::HashSet<String> {
+    let diff = diff_commits(repo, old, new).expect("Should be able to diff old to new");
     let mut paths = std::collections::HashSet::new();
     for delta in diff.deltas() {
         paths.insert(
@@ -50,11 +60,11 @@ pub fn changed_filenames(
 /// extensions to only consider files ending in those. Empty list of extensions means all files are
 /// considered.
 pub fn changed_same_file(
-    repo: &git2::Repository,
-    commit1_old: &git2::Oid,
-    commit1_new: &git2::Oid,
-    commit2_old: &git2::Oid,
-    commit2_new: &git2::Oid,
+    repo: &Repository,
+    commit1_old: &Oid,
+    commit1_new: &Oid,
+    commit2_old: &Oid,
+    commit2_new: &Oid,
     only_extensions: &Vec<&str>,
 ) -> bool {
     let commit1_files: std::collections::HashSet<_> =
@@ -73,12 +83,7 @@ pub fn changed_same_file(
 /// Since we are not keeping track of the parent relation when getting descendants, we need to
 /// essentially redo that check. Given a commit, take the parents up to n time and see if any
 /// equals the given root. An `n` of 1 here means the direct child.
-pub fn within_n_generations(
-    repo: &git2::Repository,
-    root: &git2::Oid,
-    child: &git2::Oid,
-    n: u32,
-) -> bool {
+pub fn within_n_generations(repo: &Repository, root: &Oid, child: &Oid, n: u32) -> bool {
     let child = repo.find_commit(*child).unwrap();
     let mut children = vec![child];
     for _ in 0..n {
@@ -105,13 +110,10 @@ pub fn within_n_generations(
 ///
 /// Not that this does imply the descendants are _not_ sorted by time, but also by topology. Within
 /// one branch, this makes no difference. Across branches there is no time assumption you can make.
-pub fn get_descendants(
-    repo: &git2::Repository,
-    ancestor: git2::Oid,
-) -> Result<Vec<git2::Oid>, git2::Error> {
+pub fn get_descendants(repo: &Repository, ancestor: Oid) -> Result<Vec<Oid>, git2::Error> {
     // We use Oid instead of Commit types. Commit types do not have PartialEq so would not be able
     // to use contains() further down.
-    let mut descendants: Vec<git2::Oid> = Vec::new();
+    let mut descendants: Vec<Oid> = Vec::new();
     descendants.push(ancestor);
 
     let mut revwalk = repo.revwalk()?;
