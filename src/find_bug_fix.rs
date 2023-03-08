@@ -5,7 +5,8 @@
 
 use regex::Regex;
 
-/// Given a git repository and a certain commit. Find the bug fixing commit candidates.
+/// Given a git repository and a certain commit. Find the descendants and keeps those with a
+/// message that could indicate a bug fix.
 pub fn find_bug_fixing_commits(
     repo: &git2::Repository,
     ancestor_str: &str,

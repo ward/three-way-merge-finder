@@ -116,7 +116,9 @@ pub fn print_bug_fix_csv(
                     // recalc that here or adjust code to be able to use our OABM output instead.
                     // Leaning towards the latter since that is how we get our merges to begin with
                     // anyway.
-                    // Also only keeping java files
+                    // TODO: Also only keeping java files. Thought I had it but turns out no. Seems
+                    // that was only in the original merge finding.
+                    // TODO: So that means the total merge count also does not mean much then?
                     .filter(|child| {
                         let child_commit = repo.find_commit(**child).unwrap();
                         if child_commit.parent_count() != 1 {
@@ -130,21 +132,11 @@ pub fn print_bug_fix_csv(
                         merge_changes.intersection(&bugfix_changes).next().is_some()
                     })
                     .collect();
-                println!(
-                    "{},{},{},{}",
+                print_merge_bugfix_csv_line(
                     m_commit,
-                    descendants
-                        .get(0)
-                        .map(|oid| oid.to_string())
-                        .unwrap_or_default(),
-                    descendants
-                        .get(1)
-                        .map(|oid| oid.to_string())
-                        .unwrap_or_default(),
-                    descendants
-                        .get(2)
-                        .map(|oid| oid.to_string())
-                        .unwrap_or_default(),
+                    descendants.get(0),
+                    descendants.get(1),
+                    descendants.get(2),
                 );
             }
             Err(e) => eprintln!(
@@ -153,6 +145,23 @@ pub fn print_bug_fix_csv(
             ),
         }
     }
+}
+
+/// Quick helper function for print_bug_fix_csv. Hence the ugly && that idk immediately how to
+/// solve.
+fn print_merge_bugfix_csv_line(
+    m_commit: &str,
+    bugfix1: Option<&&git2::Oid>,
+    bugfix2: Option<&&git2::Oid>,
+    bugfix3: Option<&&git2::Oid>,
+) {
+    println!(
+        "{},{},{},{}",
+        m_commit,
+        bugfix1.map(|oid| oid.to_string()).unwrap_or_default(),
+        bugfix2.map(|oid| oid.to_string()).unwrap_or_default(),
+        bugfix3.map(|oid| oid.to_string()).unwrap_or_default(),
+    );
 }
 
 /// Expects a folder that is the result of the merge commit search. Thus this folder has several
