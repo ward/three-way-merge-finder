@@ -61,6 +61,11 @@ fn main() {
                 .takes_value(true)
                 .default_value("10")
             )
+            .arg(
+                Arg::new("touches-same-line")
+                .long("touches-same-line")
+                .help("Only considers bug fixing commits that also change a line that was changed between O and M. Should be terrible for recall, but hopefully ups the precision by a lot.")
+                )
         )
         .get_matches();
     let repopath = matches.value_of("GITREPO").unwrap();
@@ -98,7 +103,19 @@ fn main() {
                 })
                 .collect();
 
-            three_way_merge_finder::publish::print_bug_fix_csv(&repo, &commitlist, fix_distance);
+            if find_bug_fix_matches.is_present("touches-same-line") {
+                three_way_merge_finder::publish::print_bug_fix_csv_overlapping_lines(
+                    &repo,
+                    &commitlist,
+                    fix_distance,
+                );
+            } else {
+                three_way_merge_finder::publish::print_bug_fix_csv(
+                    &repo,
+                    &commitlist,
+                    fix_distance,
+                );
+            }
         } else {
             eprintln!("Nothing to do");
         }

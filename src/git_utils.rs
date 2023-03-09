@@ -1,4 +1,6 @@
 use git2::{Oid, Repository, Revwalk};
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 /// Creates a toplogical revwalk over a repository, starting at HEAD.
 pub fn create_revwalk(repo: &Repository) -> Result<Revwalk, git2::Error> {
@@ -9,8 +11,7 @@ pub fn create_revwalk(repo: &Repository) -> Result<Revwalk, git2::Error> {
     Ok(revwalk)
 }
 
-/// Given two Oids, finds the commits, their trees, diffs the trees. Panic if Oid is not a commit
-/// or if no tree is found.
+/// Given two Oids, finds the commits, their trees, diffs the trees.
 fn diff_commits<'a>(
     repo: &'a Repository,
     old: &'a Oid,
@@ -26,13 +27,9 @@ fn diff_commits<'a>(
 }
 
 /// Given two commits (well, Oids), does a diff and returns the changed files.
-pub fn changed_filenames(
-    repo: &Repository,
-    old: &Oid,
-    new: &Oid,
-) -> std::collections::HashSet<String> {
+pub fn changed_filenames(repo: &Repository, old: &Oid, new: &Oid) -> HashSet<String> {
     let diff = diff_commits(repo, old, new).expect("Should be able to diff old to new");
-    let mut paths = std::collections::HashSet::new();
+    let mut paths = HashSet::new();
     for delta in diff.deltas() {
         paths.insert(
             delta
@@ -54,6 +51,84 @@ pub fn changed_filenames(
         );
     }
     paths
+}
+
+/// Given two Oids (that have to be commits), does a diff and returns the old paths.
+fn _old_paths(repo: &Repository, old: &Oid, new: &Oid) -> HashSet<PathBuf> {
+    let diff = diff_commits(repo, old, new).expect("Should be able to diff old to new");
+    let mut paths = HashSet::new();
+    for delta in diff.deltas() {
+        if let Some(path) = delta.old_file().path() {
+            paths.insert(path.to_owned());
+        }
+    }
+    paths
+}
+
+/// Given a path and two oids, looks for blames between the first and the second oid (inclusive).
+fn blame_between<'a>(
+    repo: &'a Repository,
+    old: &Oid,
+    new: &Oid,
+    path: &Path,
+) -> Result<git2::Blame<'a>, git2::Error> {
+    let mut opts = git2::BlameOptions::new();
+    opts.track_copies_same_file(true)
+        .oldest_commit(old.clone())
+        .newest_commit(new.clone());
+    let blames = repo.blame_file(path, Some(&mut opts))?;
+
+    Ok(blames)
+}
+
+/// Attempt like this to have more precision when finding bugfixes for merge commits. Ensure that
+/// the bug fixing commit changes a line that was also changed in O->A, O->B, O->M. To keep things
+/// simple for now, maybe just check with O->M
+pub fn changed_same_line(
+    repo: &Repository,
+    blame_oldest: &Oid,
+    blame_newest: &Oid,
+    commit_old: &Oid,
+    commit_new: &Oid,
+) -> bool {
+    let diff =
+        diff_commits(repo, commit_old, commit_new).expect("Should be able to diff old to new");
+    let mut changed_same_line = false;
+    // Don't cache for now, some moving out of closure issues.
+    // let mut blames = std::collections::HashMap::new();
+    println!(
+        "Foreach in O {}, M {}, bugfix {}",
+        blame_oldest, blame_newest, commit_new
+    );
+    diff.foreach(
+        &mut |_, _| true,
+        None,
+        None,
+        Some(&mut |diff_delta, _some_diff_hunk, diff_line| {
+            if let Some(path) = diff_delta.old_file().path() {
+                // Don't cache for now, some moving out of closure issues.
+                // if !blames.contains_key(path) {
+                //     if let Ok(path_blames) = blame_between(repo, blame_oldest, blame_newest, path) {
+                //         blames.insert(path, path_blames);
+                //     }
+                // }
+                if let Ok(path_blames) = blame_between(repo, blame_oldest, blame_newest, path) {
+                    if let Some(old_lineno) = diff_line.old_lineno() {
+                        // I assume that if it was changed before, then it will return a hunk,
+                        // otherwise not.
+                        if path_blames.get_line(old_lineno as usize).is_some() {
+                            changed_same_line = true;
+                            return true;
+                        }
+                    }
+                }
+            }
+            true
+        }),
+    )
+    .expect("diff.foreach went oopsy");
+
+    return changed_same_line;
 }
 
 /// Checks whether Δ1 and Δ2 have at least one file they both changed. You may provide a list of

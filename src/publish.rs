@@ -164,6 +164,66 @@ fn print_merge_bugfix_csv_line(
     );
 }
 
+/// For every given broken commit, checks for fixing descendants and prints a line of the form
+///
+/// ```text
+/// brokencommit,bugfix1,bugfix2,bugfix3
+/// ```
+///
+/// The latter three may be empty.
+pub fn print_bug_fix_csv_overlapping_lines(
+    repo: &git2::Repository,
+    broken_commit_list: &[(String, String, String, String)],
+    fix_distance: u32,
+) {
+    for commit in broken_commit_list {
+        let (o_commit, a_commit, b_commit, m_commit) = commit;
+        let o_commit_oid = git2::Oid::from_str(o_commit).unwrap();
+        let a_commit_oid = git2::Oid::from_str(a_commit).unwrap();
+        let b_commit_oid = git2::Oid::from_str(b_commit).unwrap();
+        let m_commit_oid = git2::Oid::from_str(m_commit).unwrap();
+        match crate::find_bug_fix::find_bug_fixing_commits(&repo, &m_commit) {
+            Ok(descendants) => {
+                let descendants: Vec<_> = descendants
+                    .iter()
+                    .filter(|child| {
+                        // Only keep descendants if they occur within fix_distance steps of the merge
+                        git_utils::within_n_generations(repo, &m_commit_oid, child, fix_distance)
+                    })
+                    // Try to filter on overlapping diffs/blames
+                    .filter(|child| {
+                        let child_commit = repo.find_commit(**child).unwrap();
+                        if child_commit.parent_count() != 1 {
+                            return false;
+                        }
+                        let bfc_parent = child_commit.parent_id(0).unwrap();
+
+                        git_utils::changed_same_line(
+                            repo,
+                            &o_commit_oid,
+                            &m_commit_oid,
+                            &bfc_parent,
+                            child,
+                        )
+                    })
+                    .collect();
+
+                // Output merge commit id and its bugfixes as CSV.
+                print_merge_bugfix_csv_line(
+                    m_commit,
+                    descendants.get(0),
+                    descendants.get(1),
+                    descendants.get(2),
+                );
+            }
+            Err(e) => eprintln!(
+                "Failed to find bug fixing commit for {}.\nError: {}",
+                m_commit, e
+            ),
+        }
+    }
+}
+
 /// Expects a folder that is the result of the merge commit search. Thus this folder has several
 /// folders, each representing a merge commit in name. For example:
 ///
