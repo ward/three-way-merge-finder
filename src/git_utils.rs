@@ -1,4 +1,4 @@
-use git2::{Oid, Repository, Revwalk};
+use git2::{Blame, BlameOptions, Diff, DiffLineType, DiffOptions, Oid, Repository, Revwalk};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -16,8 +16,8 @@ fn diff_commits<'a>(
     repo: &'a Repository,
     old: &'a Oid,
     new: &'a Oid,
-) -> Result<git2::Diff<'a>, git2::Error> {
-    let mut diffoptions = git2::DiffOptions::new();
+) -> Result<Diff<'a>, git2::Error> {
+    let mut diffoptions = DiffOptions::new();
     diffoptions.minimal(true).ignore_whitespace(true);
     let old = repo.find_commit(*old)?;
     let old_tree = old.tree()?;
@@ -71,8 +71,8 @@ fn blame_between<'a>(
     old: &Oid,
     new: &Oid,
     path: &Path,
-) -> Result<git2::Blame<'a>, git2::Error> {
-    let mut opts = git2::BlameOptions::new();
+) -> Result<Blame<'a>, git2::Error> {
+    let mut opts = BlameOptions::new();
     opts.track_copies_same_file(true)
         .oldest_commit(old.clone())
         .newest_commit(new.clone());
@@ -95,6 +95,7 @@ pub fn changed_same_line(
         diff_commits(repo, commit_old, commit_new).expect("Should be able to diff old to new");
     let mut changed_same_line = false;
     // Don't cache for now, some moving out of closure issues.
+    // path->blame
     // let mut blames = std::collections::HashMap::new();
     println!(
         "Foreach in O {}, M {}, bugfix {}",
@@ -105,20 +106,41 @@ pub fn changed_same_line(
         None,
         None,
         Some(&mut |diff_delta, _some_diff_hunk, diff_line| {
+            // If we already found an overlap, don't go through all the work. Cannot return false
+            // to end the iteration, because that makes the result of the foreach an error.
+            if changed_same_line {
+                return true;
+            }
+
+            // Much like in a git diff, there can be context and other stuff we are not interested
+            // in. Abort this foreach check early enough if that is the case.
+            match diff_line.origin_value() {
+                DiffLineType::Context
+                | DiffLineType::Binary
+                | DiffLineType::AddEOFNL
+                | DiffLineType::DeleteEOFNL
+                | DiffLineType::ContextEOFNL => return true,
+                _ => {}
+            };
+
+            // TODO: Should I consider the addition of a line _between_ changed lines?
+
             if let Some(path) = diff_delta.old_file().path() {
-                // Don't cache for now, some moving out of closure issues.
-                // if !blames.contains_key(path) {
-                //     if let Ok(path_blames) = blame_between(repo, blame_oldest, blame_newest, path) {
-                //         blames.insert(path, path_blames);
-                //     }
-                // }
                 if let Ok(path_blames) = blame_between(repo, blame_oldest, blame_newest, path) {
                     if let Some(old_lineno) = diff_line.old_lineno() {
                         // I assume that if it was changed before, then it will return a hunk,
                         // otherwise not.
-                        if path_blames.get_line(old_lineno as usize).is_some() {
-                            changed_same_line = true;
-                            return true;
+                        if let Some(blame_hunk) = path_blames.get_line(old_lineno as usize) {
+                            // Boundary seems to mean the blame_oldest commit was reached (in our
+                            // use-case: commit O). In other words: if the boundary was reached, we
+                            // do not care.
+                            let is_boundary = blame_hunk.is_boundary();
+
+                            if !is_boundary {
+                                println!("{:?} {} {}", path, old_lineno, is_boundary);
+                                changed_same_line = true;
+                                return true;
+                            }
                         }
                     }
                 }

@@ -97,6 +97,7 @@ pub fn print_bug_fix_csv(
         let m_commit_oid = git2::Oid::from_str(m_commit).unwrap();
         let o_to_a = git_utils::changed_filenames(repo, &o_commit_oid, &a_commit_oid);
         let o_to_b = git_utils::changed_filenames(repo, &o_commit_oid, &b_commit_oid);
+        // Keep a list of files changed in O→A AND in O→B
         let merge_changes: HashSet<_> = o_to_a
             .intersection(&o_to_b)
             // Need to get to_owned to get intersection working later...
@@ -126,8 +127,7 @@ pub fn print_bug_fix_csv(
                         }
                         let bfc_parent = child_commit.parent_id(0).unwrap();
 
-                        // First only compared O to M with parent to bugfix. Changed it to O to A
-                        // AND O to B AND bugfix to its parent.
+                        // Keep bugfixing commit if changed file was also changed in O→A AND in O→B
                         let bugfix_changes = git_utils::changed_filenames(repo, &bfc_parent, child);
                         merge_changes.intersection(&bugfix_changes).next().is_some()
                     })
@@ -171,6 +171,9 @@ fn print_merge_bugfix_csv_line(
 /// ```
 ///
 /// The latter three may be empty.
+///
+/// Bug fixing commit must be within fix_distance of the merge. At least one line it changes must
+/// be changed in O→M.
 pub fn print_bug_fix_csv_overlapping_lines(
     repo: &git2::Repository,
     broken_commit_list: &[(String, String, String, String)],
