@@ -12,7 +12,9 @@ fn main() {
 #[derive(Parser)]
 #[command(version, author, about)]
 enum Cli {
+    /// Look for merges in a Git repository
     FindMerge(FindMerge),
+    /// Given merges found in a Git repository, locate bug fixing commits to go with them.
     FindBugFix(FindBugFix),
 }
 
