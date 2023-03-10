@@ -46,8 +46,8 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
 ) {
     let folder = folder.as_ref();
     // Create folder if needed and check it is empty
-    std::fs::create_dir_all(&folder).expect("Could not create output-folder");
-    let mut dir_contents = std::fs::read_dir(&folder).expect("Could not read output-folder");
+    std::fs::create_dir_all(folder).expect("Could not create output-folder");
+    let mut dir_contents = std::fs::read_dir(folder).expect("Could not read output-folder");
     if dir_contents.next().is_some() {
         panic!("Specified output-folder is not empty. Aborting.");
     }
@@ -61,16 +61,16 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
                 continue;
             }
             let merge_path = folder.join(merge.m.to_string());
-            merge.write_all_files_to_disk(merge_path, &repo);
+            merge.write_all_files_to_disk(merge_path, repo);
         }
     } else {
         for merge in merges {
             if distinct_o && !merge.has_distinct_o() {
                 continue;
             }
-            let files = merge.files_to_consider(&repo);
+            let files = merge.files_to_consider(repo);
             let merge_path = folder.join(merge.m.to_string());
-            merge.write_files_to_disk(&merge_path, files, &repo);
+            merge.write_files_to_disk(&merge_path, files, repo);
         }
     }
     // TODO? Create a csv file of all merges in the folder
@@ -103,7 +103,7 @@ pub fn print_bug_fix_csv(
             // Need to get to_owned to get intersection working later...
             .map(|filename| filename.to_owned())
             .collect();
-        match crate::find_bug_fix::find_bug_fixing_commits(&repo, &m_commit) {
+        match crate::find_bug_fix::find_bug_fixing_commits(repo, m_commit) {
             Ok(descendants) => {
                 let descendants: Vec<_> = descendants
                     .iter()
@@ -180,12 +180,12 @@ pub fn print_bug_fix_csv_overlapping_lines(
     fix_distance: u32,
 ) {
     for commit in broken_commit_list {
-        let (o_commit, a_commit, b_commit, m_commit) = commit;
+        let (o_commit, _a_commit, _b_commit, m_commit) = commit;
         let o_commit_oid = git2::Oid::from_str(o_commit).unwrap();
-        let a_commit_oid = git2::Oid::from_str(a_commit).unwrap();
-        let b_commit_oid = git2::Oid::from_str(b_commit).unwrap();
+        // let a_commit_oid = git2::Oid::from_str(a_commit).unwrap();
+        // let b_commit_oid = git2::Oid::from_str(b_commit).unwrap();
         let m_commit_oid = git2::Oid::from_str(m_commit).unwrap();
-        match crate::find_bug_fix::find_bug_fixing_commits(&repo, &m_commit) {
+        match crate::find_bug_fix::find_bug_fixing_commits(repo, m_commit) {
             Ok(descendants) => {
                 let descendants: Vec<_> = descendants
                     .iter()
@@ -254,68 +254,65 @@ where
     P: AsRef<std::path::Path>,
 {
     let folder = folder.as_ref();
-    for commit_folder in folder.read_dir().unwrap() {
-        if let Ok(commit_folder) = commit_folder {
-            let commit_folder = commit_folder.path();
-            if let Some(commit_name) = commit_folder.file_name().and_then(|osstr| osstr.to_str()) {
-                match crate::find_bug_fix::find_bug_fixing_commits(&repo, &commit_name) {
-                    Ok(descendants) => {
-                        let files_to_consider: HashSet<String> =
-                            crate::relative_files::RelativeFiles::open(&commit_folder.join("m"))
-                                .map(|path| path.to_str().map(|s| s.to_owned()))
-                                .flatten()
-                                .collect();
-                        if let Some(bug_fix_1) = descendants.get(0) {
-                            merge::write_files_from_commit_to_disk(
-                                commit_folder.join("bf1"),
-                                *bug_fix_1,
-                                repo,
-                                &files_to_consider,
-                                "BF1",
-                            );
-                        }
-                        if let Some(bug_fix_2) = descendants.get(1) {
-                            merge::write_files_from_commit_to_disk(
-                                commit_folder.join("bf2"),
-                                *bug_fix_2,
-                                repo,
-                                &files_to_consider,
-                                "BF2",
-                            );
-                        }
-                        if let Some(bug_fix_3) = descendants.get(2) {
-                            merge::write_files_from_commit_to_disk(
-                                commit_folder.join("bf3"),
-                                *bug_fix_3,
-                                repo,
-                                &files_to_consider,
-                                "BF3",
-                            );
-                        }
-
-                        // Output a CSV to STDOUT
-                        println!(
-                            "{},{},{},{}",
-                            commit_name,
-                            descendants
-                                .get(0)
-                                .map(|oid| oid.to_string())
-                                .unwrap_or_default(),
-                            descendants
-                                .get(1)
-                                .map(|oid| oid.to_string())
-                                .unwrap_or_default(),
-                            descendants
-                                .get(2)
-                                .map(|oid| oid.to_string())
-                                .unwrap_or_default(),
+    for commit_folder in folder.read_dir().unwrap().flatten() {
+        let commit_folder = commit_folder.path();
+        if let Some(commit_name) = commit_folder.file_name().and_then(|osstr| osstr.to_str()) {
+            match crate::find_bug_fix::find_bug_fixing_commits(repo, commit_name) {
+                Ok(descendants) => {
+                    let files_to_consider: HashSet<String> =
+                        crate::relative_files::RelativeFiles::open(&commit_folder.join("m"))
+                            .filter_map(|path| path.to_str().map(|s| s.to_owned()))
+                            .collect();
+                    if let Some(bug_fix_1) = descendants.get(0) {
+                        merge::write_files_from_commit_to_disk(
+                            commit_folder.join("bf1"),
+                            *bug_fix_1,
+                            repo,
+                            &files_to_consider,
+                            "BF1",
                         );
                     }
-                    Err(e) => eprintln!(
-                        "Failed to find bug fixing commit for {}.\nError: {}",
-                        commit_name, e
-                    ),
+                    if let Some(bug_fix_2) = descendants.get(1) {
+                        merge::write_files_from_commit_to_disk(
+                            commit_folder.join("bf2"),
+                            *bug_fix_2,
+                            repo,
+                            &files_to_consider,
+                            "BF2",
+                        );
+                    }
+                    if let Some(bug_fix_3) = descendants.get(2) {
+                        merge::write_files_from_commit_to_disk(
+                            commit_folder.join("bf3"),
+                            *bug_fix_3,
+                            repo,
+                            &files_to_consider,
+                            "BF3",
+                        );
+                    }
+
+                    // Output a CSV to STDOUT
+                    println!(
+                        "{},{},{},{}",
+                        commit_name,
+                        descendants
+                            .get(0)
+                            .map(|oid| oid.to_string())
+                            .unwrap_or_default(),
+                        descendants
+                            .get(1)
+                            .map(|oid| oid.to_string())
+                            .unwrap_or_default(),
+                        descendants
+                            .get(2)
+                            .map(|oid| oid.to_string())
+                            .unwrap_or_default(),
+                    );
                 }
+                Err(e) => eprintln!(
+                    "Failed to find bug fixing commit for {}.\nError: {}",
+                    commit_name, e
+                ),
             }
         }
     }

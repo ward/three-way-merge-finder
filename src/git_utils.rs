@@ -74,8 +74,8 @@ fn blame_between<'a>(
 ) -> Result<Blame<'a>, git2::Error> {
     let mut opts = BlameOptions::new();
     opts.track_copies_same_file(true)
-        .oldest_commit(old.clone())
-        .newest_commit(new.clone());
+        .oldest_commit(*old)
+        .newest_commit(*new);
     let blames = repo.blame_file(path, Some(&mut opts))?;
 
     Ok(blames)
@@ -150,7 +150,7 @@ pub fn changed_same_line(
     )
     .expect("diff.foreach went oopsy");
 
-    return changed_same_line;
+    changed_same_line
 }
 
 /// Checks whether Δ1 and Δ2 have at least one file they both changed. You may provide a list of
@@ -162,7 +162,7 @@ pub fn changed_same_file(
     commit1_new: &Oid,
     commit2_old: &Oid,
     commit2_new: &Oid,
-    only_extensions: &Vec<&str>,
+    only_extensions: &[&str],
 ) -> bool {
     let commit1_files: std::collections::HashSet<_> =
         changed_filenames(repo, commit1_old, commit1_new)

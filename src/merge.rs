@@ -21,7 +21,8 @@ pub fn find_merges(
                 true
             }
         })
-        .map(|commit| {
+        // filter_map is map + flatten. Filters out None and unwraps Some
+        .filter_map(|commit| {
             // Parent order is deterministic and saved as part of the merge commit. Subsequent runs
             // will thus give the same parents for each position.
             let parent1 = commit
@@ -48,8 +49,6 @@ pub fn find_merges(
                 }
             }
         })
-        // flatten filters None out and unwraps Some
-        .flatten()
         .collect()
 }
 
@@ -196,7 +195,7 @@ impl ThreeWayMerge {
     pub fn a_b_change_same_file(
         &self,
         repo: &git2::Repository,
-        only_extensions: &Vec<&str>,
+        only_extensions: &[&str],
     ) -> bool {
         crate::git_utils::changed_same_file(
             repo,
@@ -264,7 +263,7 @@ pub fn write_files_from_commit_to_disk<P: AsRef<std::path::Path>>(
     let commit = repo.find_commit(commit).unwrap();
     let tree = commit.tree().unwrap();
     for file in changed_files {
-        let tree_entry = tree.get_path(&std::path::Path::new(&file));
+        let tree_entry = tree.get_path(std::path::Path::new(&file));
         if tree_entry.is_err() {
             eprintln!(
                 "File {} not present in {}. Skipping.",
@@ -273,7 +272,7 @@ pub fn write_files_from_commit_to_disk<P: AsRef<std::path::Path>>(
             continue;
         }
         let tree_entry = tree_entry.unwrap();
-        let obj = match tree_entry.to_object(&repo) {
+        let obj = match tree_entry.to_object(repo) {
             Ok(obj) => obj,
             Err(err) => {
                 eprintln!(
