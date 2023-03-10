@@ -1,4 +1,4 @@
-use clap::{crate_version, AppSettings::DeriveDisplayOrder, Parser};
+use clap::{crate_version, Parser};
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -10,7 +10,7 @@ fn main() {
 }
 
 #[derive(Parser)]
-#[clap(version = crate_version!(), author = "Ward Muylaert <ward.muylaert@gmail.com>", setting = DeriveDisplayOrder)]
+#[clap(version = crate_version!(), author = "Ward Muylaert <ward.muylaert@gmail.com>")]
 enum Cli {
     FindMerge(FindMerge),
     FindBugFix(FindBugFix),
