@@ -1,150 +1,122 @@
-use clap::{Arg, Command};
+use clap::{crate_version, AppSettings::DeriveDisplayOrder, Parser};
 use std::fs::File;
 use std::io::prelude::*;
 
 fn main() {
-    let matches = cli().get_matches();
-
-    if let Some(find_bug_fix_matches) = matches.subcommand_matches("find-bug-fix") {
-        handle_find_fix(find_bug_fix_matches);
-    } else if let Some(find_merge_matches) = matches.subcommand_matches("find-merges") {
-        handle_find_merges(find_merge_matches);
-    }
+    match Cli::parse() {
+        Cli::FindMerge(find_merge) => handle_find_merges(find_merge),
+        Cli::FindBugFix(find_bug_fix) => handle_find_fix(find_bug_fix),
+    };
 }
 
-fn cli() -> clap::App<'static> {
-    Command::new("Merge Finder")
-        .version("0.4.0")
-        .author("Ward Muylaert <ward.muylaert@gmail.com>")
-        .about("Find 3-way merges in a git repository.")
-        .subcommand(Command::new("find-merges")
-                    .arg(
-                        Arg::new("GITREPO")
-                        .help("Give the path of an existing local git repository.")
-                        .required(true),
-                        )
-                    .arg(
-                        Arg::new("output-folder")
-                        .long("output-folder")
-                        .help("Specify a folder in which to place the details of merges. This information will not be produced if this parameter is not present.")
-                        .takes_value(true),
-                        )
-                    .arg(
-                        Arg::new("before")
-                        .long("before")
-                        .help("Specify a certain number of seconds since the UNIX epoch. Only merge commits made before this time will be used.")
-                        .takes_value(true)
-                        )
-                    .arg(
-                        Arg::new("distinct-o")
-                        .long("distinct-o")
-                        .help("Avoid merges where O is the same commit as A (or the same commit as B). These are trivial merges.")
-                        .takes_value(false)
-                        )
-                    .arg(
-                        Arg::new("touches-same-file")
-                        .long("touches-same-file")
-                        .help("Only find merges where A and B have changed the same file at least once.")
-                        .takes_value(false)
-                        )
-                    .arg(
-                        Arg::new("all-files")
-                        .long("all-files")
-                        .help("Copy all files present in either O, A, B, or M of the three way merge, not just those present in each and changed")
-                        )
-                    )
-        .subcommand(Command::new("find-bug-fix")
-                    .arg(
-                        Arg::new("GITREPO")
-                        .help("Give the path of an existing local git repository.")
-                        .required(true),
-                        )
-                    .arg(
-                        Arg::new("commitlist")
-                        .long("commitlist")
-                        .help("File listing merge commits, as created by this tool. For each of the merge commits, the tool will look for bug fixing commits. Results are written to a csv file. givencommit,bugfix1,bugfix2,bugfix3. Last three may be empty.")
-                        .takes_value(true),
-                        )
-                    .arg(
-                        Arg::new("commitfolder")
-                        .long("commitfolder")
-                        .help("A folder that is the result of finding three way merges. Each of the subfolders represents a three way merge and is named by the hash of the merge commit. This name is used to find fixing descendants. Fixing descendants are added as subfolders of a three way merge folder, alongside the existing o, a, b, m folders.")
-                        .takes_value(true),
-                        )
-                    .arg(
-                        Arg::new("fix-distance")
-                        .long("fix-distance")
-                        .help("Specify how 'far' away the fix can be from the merge. This is done in terms of the number of children. Currently only applies to --commitlist.")
-                        .takes_value(true)
-                        .default_value("10")
-                        )
-                    .arg(
-                        Arg::new("touches-same-line")
-                        .long("touches-same-line")
-                        .help("Only considers bug fixing commits that also change a line that was changed between O and M. Should be terrible for recall, but hopefully ups the precision by a lot.")
-                        )
-                    )
+#[derive(Parser)]
+#[clap(version = crate_version!(), author = "Ward Muylaert <ward.muylaert@gmail.com>", setting = DeriveDisplayOrder)]
+enum Cli {
+    FindMerge(FindMerge),
+    FindBugFix(FindBugFix),
 }
 
-fn handle_find_merges(matches: &clap::ArgMatches) {
-    let repopath = matches.value_of("GITREPO").unwrap();
-    let repo = match git2::Repository::open(repopath) {
+#[derive(Parser)]
+struct FindMerge {
+    /// Give the path of an existing local Git repository
+    gitrepo: String,
+    /// Specify a folder in which to place the details of merges. This information will not be
+    /// produced if this parameter is not present.
+    #[clap(long)]
+    output_folder: Option<String>,
+    /// Specify a certain number of seconds since the UNIX epoch. Only merge commits made before
+    /// this time will be used.
+    #[clap(long)]
+    before: Option<i64>,
+    /// Avoid merges where O is the same commit as A (or the same commit as B). These are trivial
+    /// merges.
+    #[clap(long)]
+    distinct_o: bool,
+    /// Only find merges where A and B have changed the same file at least once.
+    #[clap(long)]
+    touches_same_file: bool,
+    /// Copy all files present in either O, A, B, or M of the three way merge, not just those
+    /// present in each and changed
+    #[clap(long)]
+    all_files: bool,
+}
+
+#[derive(Parser)]
+struct FindBugFix {
+    /// Give the path of an existing local Git repository.
+    gitrepo: String,
+    /// File listing merge commits, as created by this tool. For each of the merge commits, the
+    /// tool will look for bug fixing commits. Results are written to a csv file.
+    /// givencommit,bugfix1,bugfix2,bugfix3. Last three may be empty.
+    #[clap(long)]
+    commitlist: Option<String>,
+    /// A folder that is the result of finding three way merges. Each of the subfolders represents
+    /// a three way merge and is named by the hash of the merge commit. This name is used to find
+    /// fixing descendants. Fixing descendants are added as subfolders of a three way merge folder,
+    /// alongside the existing o, a, b, m folders.
+    #[clap(long)]
+    commitfolder: Option<String>,
+    /// Specify how 'far' away the fix can be from the merge. This is done in terms of the number
+    /// of children. Currently only applies to --commitlist.
+    #[clap(long, default_value = "10")]
+    fix_distance: u32,
+    /// Only considers bug fixing commits that also change a line that was changed between O and M.
+    /// Should be terrible for recall, but hopefully ups the precision significantly.
+    #[clap(long)]
+    touches_same_line: bool,
+}
+
+fn handle_find_merges(cli: FindMerge) {
+    let repo = match git2::Repository::open(cli.gitrepo) {
         Ok(repo) => repo,
         Err(e) => panic!("Failed to open: {}", e),
     };
-
     let revwalk =
         three_way_merge_finder::git_utils::create_revwalk(&repo).expect("Could not create revwalk");
-    let output_folder = matches.value_of("output-folder");
-    let before: Option<i64> = matches
-        .value_of("before")
-        .and_then(|before| before.parse().ok());
-    let all_files = matches.is_present("all-files");
-    let distinct_o = matches.is_present("distinct-o");
-    let touches_same_file = matches.is_present("touches-same-file");
 
-    if let Some(output_folder) = output_folder {
+    if let Some(output_folder) = cli.output_folder {
         three_way_merge_finder::publish::folder_dump(
             output_folder,
             &repo,
             revwalk,
-            before,
-            all_files,
-            distinct_o,
+            cli.before,
+            cli.all_files,
+            cli.distinct_o,
         );
     } else {
         three_way_merge_finder::publish::print_csv_of_merges(
             &repo,
             revwalk,
-            before,
-            distinct_o,
-            touches_same_file,
+            cli.before,
+            cli.distinct_o,
+            cli.touches_same_file,
         );
     }
 }
 
-fn handle_find_fix(matches: &clap::ArgMatches) {
-    let repopath = matches.value_of("GITREPO").unwrap();
-    let repo = match git2::Repository::open(repopath) {
+fn handle_find_fix(cli: FindBugFix) {
+    let repo = match git2::Repository::open(cli.gitrepo) {
         Ok(repo) => repo,
         Err(e) => panic!("Failed to open: {}", e),
     };
 
-    if let Some(commitfolder) = matches.value_of("commitfolder") {
+    if let Some(commitfolder) = cli.commitfolder {
         three_way_merge_finder::publish::write_bug_fix_files(commitfolder, &repo);
-    } else if let Some(commitfile) = matches.value_of("commitlist") {
-        let fix_distance: u32 = matches.value_of("fix-distance").unwrap().parse().unwrap();
+    } else if let Some(commitfile) = cli.commitlist {
+        let commitlist = read_commitlist_file(&commitfile);
 
-        let commitlist = read_commitlist_file(commitfile);
-
-        if matches.is_present("touches-same-line") {
+        if cli.touches_same_line {
             three_way_merge_finder::publish::print_bug_fix_csv_overlapping_lines(
                 &repo,
                 &commitlist,
-                fix_distance,
+                cli.fix_distance,
             );
         } else {
-            three_way_merge_finder::publish::print_bug_fix_csv(&repo, &commitlist, fix_distance);
+            three_way_merge_finder::publish::print_bug_fix_csv(
+                &repo,
+                &commitlist,
+                cli.fix_distance,
+            );
         }
     } else {
         eprintln!("Nothing to do");
