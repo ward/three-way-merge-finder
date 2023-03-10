@@ -1,6 +1,7 @@
 use git2::{Blame, BlameOptions, Diff, DiffLineType, DiffOptions, Oid, Repository, Revwalk};
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::io::prelude::*;
+use std::path::Path;
 
 /// Creates a toplogical revwalk over a repository, starting at HEAD.
 pub fn create_revwalk(repo: &Repository) -> Result<Revwalk, git2::Error> {
@@ -49,18 +50,6 @@ pub fn changed_filenames(repo: &Repository, old: &Oid, new: &Oid) -> HashSet<Str
                 .unwrap()
                 .to_owned(),
         );
-    }
-    paths
-}
-
-/// Given two Oids (that have to be commits), does a diff and returns the old paths.
-fn _old_paths(repo: &Repository, old: &Oid, new: &Oid) -> HashSet<PathBuf> {
-    let diff = diff_commits(repo, old, new).expect("Should be able to diff old to new");
-    let mut paths = HashSet::new();
-    for delta in diff.deltas() {
-        if let Some(path) = delta.old_file().path() {
-            paths.insert(path.to_owned());
-        }
     }
     paths
 }
@@ -236,4 +225,96 @@ pub fn get_descendants(repo: &Repository, ancestor: Oid) -> Result<Vec<Oid>, git
     descendants.remove(0);
 
     Ok(descendants)
+}
+
+/// Recursive monstrosity to find all the paths in a commit's tree. Maybe I'm missing something
+/// obvious, but did not see another "easy" way.
+pub fn get_all_paths(
+    tree: &git2::Tree,
+    current_path: &str,
+    repo: &git2::Repository,
+) -> std::collections::HashSet<String> {
+    let mut result = std::collections::HashSet::new();
+    for tree_entry in tree.iter() {
+        match tree_entry.kind() {
+            Some(git2::ObjectType::Tree) => {
+                let tree_name = tree_entry.name().unwrap();
+                let new_path = if current_path.is_empty() {
+                    tree_name.to_owned()
+                } else {
+                    format!("{}/{}", current_path, tree_name)
+                };
+                let tree_object = tree_entry.to_object(repo).unwrap();
+                let new_tree = tree_object.as_tree().unwrap();
+                let mut rec_paths = get_all_paths(new_tree, &new_path, repo);
+                // drain instead of iter to move ownership
+                for p in rec_paths.drain() {
+                    result.insert(p);
+                }
+            }
+            Some(git2::ObjectType::Blob) => {
+                let tree_name = tree_entry.name().unwrap();
+                let final_path = if current_path.is_empty() {
+                    tree_name.to_owned()
+                } else {
+                    format!("{}/{}", current_path, tree_name)
+                };
+                result.insert(final_path);
+            }
+            _ => {
+                unreachable!("Should not be able to get here when walking through a commit");
+            }
+        }
+    }
+    result
+}
+
+/// For a given list of files, locates them in the given commit and writes them into the provided
+/// folder. The files are placed in subfolders mimicking their folders in the commit.
+pub fn write_files_from_commit_to_disk<P: AsRef<std::path::Path>>(
+    folder: P,
+    commit: git2::Oid,
+    repo: &git2::Repository,
+    changed_files: &std::collections::HashSet<String>,
+    commit_description: &str,
+) {
+    let folder = folder.as_ref();
+    let commit = repo.find_commit(commit).unwrap();
+    let tree = commit.tree().unwrap();
+    for file in changed_files {
+        let tree_entry = tree.get_path(std::path::Path::new(&file));
+        if tree_entry.is_err() {
+            eprintln!(
+                "File {} not present in {}. Skipping.",
+                &file, commit_description
+            );
+            continue;
+        }
+        let tree_entry = tree_entry.unwrap();
+        let obj = match tree_entry.to_object(repo) {
+            Ok(obj) => obj,
+            Err(err) => {
+                eprintln!(
+                    "ERR: '{}' when looking for file {} in commit {}. File had tree entry id: {}",
+                    err,
+                    file,
+                    commit.id(),
+                    tree_entry.id()
+                );
+                continue;
+            }
+        };
+        let blob = obj.as_blob().unwrap();
+        let fullfilepath = folder.join(file);
+        if let Some(filefolder) = fullfilepath.as_path().parent() {
+            std::fs::create_dir_all(filefolder).unwrap_or_else(|err| {
+                panic!("Failed to create necessary folders to save file from git to disk. File: {:?}, Err: {}",
+                    fullfilepath,
+                    err);
+            });
+        }
+        let mut writer = std::fs::File::create(&fullfilepath)
+            .unwrap_or_else(|_| panic!("Failed to open file for writing {:?}", &fullfilepath));
+        writer.write_all(blob.content()).unwrap();
+    }
 }

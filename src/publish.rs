@@ -77,6 +77,9 @@ pub fn folder_dump<P: AsRef<std::path::Path>>(
     // TODO? Place detailed diff "overview" in a text file there
 }
 
+
+// TODO Might want to move some of the following logic to find_bug_fix.
+
 /// For every given broken commit, checks for fixing descendants and prints a line of the form
 ///
 /// ```text
@@ -264,7 +267,7 @@ where
                             .filter_map(|path| path.to_str().map(|s| s.to_owned()))
                             .collect();
                     if let Some(bug_fix_1) = descendants.get(0) {
-                        merge::write_files_from_commit_to_disk(
+                        git_utils::write_files_from_commit_to_disk(
                             commit_folder.join("bf1"),
                             *bug_fix_1,
                             repo,
@@ -273,7 +276,7 @@ where
                         );
                     }
                     if let Some(bug_fix_2) = descendants.get(1) {
-                        merge::write_files_from_commit_to_disk(
+                        git_utils::write_files_from_commit_to_disk(
                             commit_folder.join("bf2"),
                             *bug_fix_2,
                             repo,
@@ -282,7 +285,7 @@ where
                         );
                     }
                     if let Some(bug_fix_3) = descendants.get(2) {
-                        merge::write_files_from_commit_to_disk(
+                        git_utils::write_files_from_commit_to_disk(
                             commit_folder.join("bf3"),
                             *bug_fix_3,
                             repo,
@@ -292,21 +295,11 @@ where
                     }
 
                     // Output a CSV to STDOUT
-                    println!(
-                        "{},{},{},{}",
+                    print_merge_bugfix_csv_line(
                         commit_name,
-                        descendants
-                            .get(0)
-                            .map(|oid| oid.to_string())
-                            .unwrap_or_default(),
-                        descendants
-                            .get(1)
-                            .map(|oid| oid.to_string())
-                            .unwrap_or_default(),
-                        descendants
-                            .get(2)
-                            .map(|oid| oid.to_string())
-                            .unwrap_or_default(),
+                        descendants.get(0).as_ref(),
+                        descendants.get(1).as_ref(),
+                        descendants.get(2).as_ref(),
                     );
                 }
                 Err(e) => eprintln!(

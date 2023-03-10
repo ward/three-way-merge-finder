@@ -1,4 +1,4 @@
-use clap::{crate_version, Parser};
+use clap::Parser;
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -10,7 +10,7 @@ fn main() {
 }
 
 #[derive(Parser)]
-#[clap(version = crate_version!(), author = "Ward Muylaert <ward.muylaert@gmail.com>")]
+#[command(version, author, about)]
 enum Cli {
     FindMerge(FindMerge),
     FindBugFix(FindBugFix),
@@ -22,22 +22,22 @@ struct FindMerge {
     gitrepo: String,
     /// Specify a folder in which to place the details of merges. This information will not be
     /// produced if this parameter is not present.
-    #[clap(long)]
+    #[arg(long)]
     output_folder: Option<String>,
     /// Specify a certain number of seconds since the UNIX epoch. Only merge commits made before
     /// this time will be used.
-    #[clap(long)]
+    #[arg(long)]
     before: Option<i64>,
     /// Avoid merges where O is the same commit as A (or the same commit as B). These are trivial
     /// merges.
-    #[clap(long)]
+    #[arg(long)]
     distinct_o: bool,
     /// Only find merges where A and B have changed the same file at least once.
-    #[clap(long)]
+    #[arg(long)]
     touches_same_file: bool,
     /// Copy all files present in either O, A, B, or M of the three way merge, not just those
     /// present in each and changed
-    #[clap(long)]
+    #[arg(long)]
     all_files: bool,
 }
 
@@ -48,21 +48,21 @@ struct FindBugFix {
     /// File listing merge commits, as created by this tool. For each of the merge commits, the
     /// tool will look for bug fixing commits. Results are written to a csv file.
     /// givencommit,bugfix1,bugfix2,bugfix3. Last three may be empty.
-    #[clap(long)]
+    #[arg(long)]
     commitlist: Option<String>,
     /// A folder that is the result of finding three way merges. Each of the subfolders represents
     /// a three way merge and is named by the hash of the merge commit. This name is used to find
     /// fixing descendants. Fixing descendants are added as subfolders of a three way merge folder,
     /// alongside the existing o, a, b, m folders.
-    #[clap(long)]
+    #[arg(long)]
     commitfolder: Option<String>,
     /// Specify how 'far' away the fix can be from the merge. This is done in terms of the number
     /// of children. Currently only applies to --commitlist.
-    #[clap(long, default_value = "10")]
+    #[arg(long, default_value_t = 10)]
     fix_distance: u32,
     /// Only considers bug fixing commits that also change a line that was changed between O and M.
     /// Should be terrible for recall, but hopefully ups the precision significantly.
-    #[clap(long)]
+    #[arg(long)]
     touches_same_line: bool,
 }
 
