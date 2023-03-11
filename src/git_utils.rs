@@ -86,10 +86,10 @@ pub fn changed_same_line(
     // Don't cache for now, some moving out of closure issues.
     // path->blame
     // let mut blames = std::collections::HashMap::new();
-    println!(
-        "Foreach in O {}, M {}, bugfix {}",
-        blame_oldest, blame_newest, commit_new
-    );
+    // println!(
+    //     "Foreach in O {}, M {}, bugfix {}",
+    //     blame_oldest, blame_newest, commit_new
+    // );
     diff.foreach(
         &mut |_, _| true,
         None,
@@ -126,7 +126,7 @@ pub fn changed_same_line(
                             let is_boundary = blame_hunk.is_boundary();
 
                             if !is_boundary {
-                                println!("{:?} {} {}", path, old_lineno, is_boundary);
+                                // println!("{:?} {} {}", path, old_lineno, is_boundary);
                                 changed_same_line = true;
                                 return true;
                             }
