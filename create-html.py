@@ -26,7 +26,9 @@ FIX_OVERVIEW_FILENAME = "fix-counts.csv"
 BUGFIX_CSVS = "bugfixes/{}.csv" # {} will be project name
 MERGE_CSVS = "merges/{}.csv" # {} will be project name
 
-# Can only change the folder name of these.
+# Can only change the folder name of these. The others are being linked to.
+# TODO: Create that folder in this script
+# TODO: Make just that folder the configuration, not every file.
 OUT_INDEX = "html-overview/index.html"
 OUT_PROJECT = "html-overview/{}.html" # {} project name
 OUT_MERGE = "html-overview/{}.{}.html" # {} project, mergehash
@@ -110,13 +112,29 @@ for project in tqdm(all_projects):
 # And finally, the merge file for every merge that had an immediate fix. This
 # will take a bit since we are running git diff --stat three times per merge...
 
-# Running this on all 1207 merges took 1h40 the first time (ie, with three git diff calls)
-for (project, (o, a, b, m, fix)) in tqdm(project_merges):
+def git_diff_stat(project, commit_old, commit_new):
+    git = subprocess.run(["git", "diff", "--numstat", commit_old, commit_new], capture_output=True, cwd="{}{}".format(PROJECT_FOLDER, project))
+    return git.stdout.decode(encoding="utf-8")
+
+def stat_to_files(diff_stat_output):
+    return map(lambda line: line.split("\t")[2], diff_stat_output.splitlines())
+
+def overlapping_files(diff_stat_output1, diff_stat_output2, diff_stat_output3):
+    """Assumes git diff --numstat was called and takes the output as a string."""
+    files1 = frozenset(stat_to_files(diff_stat_output1))
+    files2 = frozenset(stat_to_files(diff_stat_output2))
+    files3 = frozenset(stat_to_files(diff_stat_output3))
+    return files1.intersection(files2).intersection(files3)
+
+def write_merge_html_file(project_merge):
+    (project, (o, a, b, m, fix)) = project_merge
     merge_html_file = Path(OUT_MERGE.format(project, m))
     with merge_html_file.open("w") as merge_html:
         print("<!DOCTYPE><html><body>", file=merge_html)
         print("<h2>Meta</h2>", file=merge_html)
         print("<p>{}</p>".format(project), file=merge_html)
+        print("<pre>cd ../{}</pre>".format(project), file=merge_html)
+        print("<pre>{},{},{},</pre>".format(project, m, fix), file=merge_html)
         print("<h2>O to A</h2>", file=merge_html)
         print("<pre>git diff --stat {} {}</pre>".format(o, a), file=merge_html)
         print("<pre>git diff {} {}</pre>".format(o, a), file=merge_html)
@@ -126,19 +144,20 @@ for (project, (o, a, b, m, fix)) in tqdm(project_merges):
         print("<h2>M to Fix</h2>", file=merge_html)
         print("<pre>git diff --stat {} {}</pre>".format(m, fix), file=merge_html)
         print("<pre>git diff {} {}</pre>".format(m, fix), file=merge_html)
+        print("<pre>git -c delta.side-by-side=true diff {} {}</pre>".format(m, fix), file=merge_html)
 
         # Running git makes it slow
 
         print("<h1>O to A</h1>", file=merge_html)
-        git = subprocess.run(["git", "diff", "--stat", o, a], capture_output=True, cwd="{}{}".format(PROJECT_FOLDER, project))
+        git_oa = git_diff_stat(project, o, a)
         print("<pre>", file=merge_html)
-        print(git.stdout.decode(encoding="utf-8"), file=merge_html)
+        print(git_oa, file=merge_html)
         print("</pre>", file=merge_html)
 
         print("<h1>O to B</h1>", file=merge_html)
-        git = subprocess.run(["git", "diff", "--stat", o, b], capture_output=True, cwd="{}{}".format(PROJECT_FOLDER, project))
+        git_ob = git_diff_stat(project, o, b)
         print("<pre>", file=merge_html)
-        print(git.stdout.decode(encoding="utf-8"), file=merge_html)
+        print(git_ob, file=merge_html)
         print("</pre>", file=merge_html)
 
         print("<h1>M to Fix</h1>", file=merge_html)
@@ -147,9 +166,24 @@ for (project, (o, a, b, m, fix)) in tqdm(project_merges):
         print("<pre>", file=merge_html)
         print(commit_msg, file=merge_html)
         print("</pre>", file=merge_html)
-        git = subprocess.run(["git", "diff", "--stat", m, fix], capture_output=True, cwd="{}{}".format(PROJECT_FOLDER, project))
+        git_mf = git_diff_stat(project, m, fix)
         print("<pre>", file=merge_html)
-        print(git.stdout.decode(encoding="utf-8"), file=merge_html)
+        print(git_mf, file=merge_html)
         print("</pre>", file=merge_html)
 
+        print("<h1>Overlapping files</h1>", file=merge_html)
+        overlap = overlapping_files(git_oa, git_ob, git_mf)
+        if len(overlap) == 0:
+            print("<p>No overlap.</p>", file=merge_html)
+        else:
+            print("<pre>", file=merge_html)
+            print("\n".join(overlap), file=merge_html)
+            print("</pre>", file=merge_html)
+
         print("</body></html>", file=merge_html)
+
+# Running this on all 1207 merges took 1h40 the first time (ie, with three git
+# diff calls). In the end I think the filter=blob:none clone was to blame.
+# Every diff resulted in needing to bother the remote server.
+for project_merge in tqdm(project_merges):
+    write_merge_html_file(project_merge)
