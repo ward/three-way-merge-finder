@@ -24,25 +24,11 @@ pub fn find_merges(
         })
         // filter_map is map + flatten. Filters out None and unwraps Some
         .filter_map(|commit| {
-            // Parent order is deterministic and saved as part of the merge commit. Subsequent runs
-            // will thus give the same parents for each position.
-            let parent1 = commit
-                .parent_id(0)
-                .expect("Failed to get id for first parent.");
-            let parent2 = commit
-                .parent_id(1)
-                .expect("Failed to get id for second parent.");
-            let base = repo.merge_base(parent1, parent2);
-            match base {
-                Ok(base) => Some(ThreeWayMerge {
-                    o: base,
-                    a: parent1,
-                    b: parent2,
-                    m: commit.id(),
-                }),
+            match ThreeWayMerge::new(repo, &commit) {
+                Ok(twm) => Some(twm),
                 Err(e) => {
                     eprintln!(
-                        "Could not find base for the two parent commits of {}. Full error: {}",
+                        "Failed to find either parent commits or their common base for {}. Full error: {}",
                         commit.id(),
                         e
                     );
@@ -67,6 +53,21 @@ pub struct ThreeWayMerge {
 }
 
 impl ThreeWayMerge {
+    // Create new ThreeWayMerge based on a valid merge commit.
+    fn new(repo: &git2::Repository, commit: &git2::Commit) -> Result<ThreeWayMerge, git2::Error> {
+        // Parent order is deterministic and saved as part of the merge commit. Subsequent runs
+        // will thus give the same parents for each position.
+        let parent1 = commit.parent_id(0)?;
+        let parent2 = commit.parent_id(1)?;
+        let base = repo.merge_base(parent1, parent2)?;
+        Ok(ThreeWayMerge {
+            o: base,
+            a: parent1,
+            b: parent2,
+            m: commit.id(),
+        })
+    }
+
     /// Return a comma separated line of the four commits that form a three way merge. Order:
     /// O,A,B,M.
     pub fn to_csv_line(&self) -> String {
