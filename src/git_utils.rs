@@ -79,6 +79,7 @@ pub fn changed_same_line(
     blame_newest: &Oid,
     commit_old: &Oid,
     commit_new: &Oid,
+    only_extensions: &[&str],
 ) -> bool {
     let diff =
         diff_commits(repo, commit_old, commit_new).expect("Should be able to diff old to new");
@@ -115,20 +116,30 @@ pub fn changed_same_line(
             // TODO: Should I consider the addition of a line _between_ changed lines?
 
             if let Some(path) = diff_delta.old_file().path() {
-                if let Ok(path_blames) = blame_between(repo, blame_oldest, blame_newest, path) {
-                    if let Some(old_lineno) = diff_line.old_lineno() {
-                        // I assume that if it was changed before, then it will return a hunk,
-                        // otherwise not.
-                        if let Some(blame_hunk) = path_blames.get_line(old_lineno as usize) {
-                            // Boundary seems to mean the blame_oldest commit was reached (in our
-                            // use-case: commit O). In other words: if the boundary was reached, we
-                            // do not care.
-                            let is_boundary = blame_hunk.is_boundary();
+                if let Some(ext) = path.extension() {
+                    if only_extensions
+                        .iter()
+                        .any(|only| ext.eq_ignore_ascii_case(only))
+                    {
+                        if let Ok(path_blames) =
+                            blame_between(repo, blame_oldest, blame_newest, path)
+                        {
+                            if let Some(old_lineno) = diff_line.old_lineno() {
+                                // I assume that if it was changed before, then it will return a hunk,
+                                // otherwise not.
+                                if let Some(blame_hunk) = path_blames.get_line(old_lineno as usize)
+                                {
+                                    // Boundary seems to mean the blame_oldest commit was reached (in our
+                                    // use-case: commit O). In other words: if the boundary was reached, we
+                                    // do not care.
+                                    let is_boundary = blame_hunk.is_boundary();
 
-                            if !is_boundary {
-                                // println!("{:?} {} {}", path, old_lineno, is_boundary);
-                                changed_same_line = true;
-                                return true;
+                                    if !is_boundary {
+                                        // println!("{:?} {} {}", path, old_lineno, is_boundary);
+                                        changed_same_line = true;
+                                        return true;
+                                    }
+                                }
                             }
                         }
                     }

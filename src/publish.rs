@@ -94,52 +94,21 @@ pub fn print_bug_fix_csv(
 ) {
     for commit in broken_commit_list {
         let (o_commit, a_commit, b_commit, m_commit) = commit;
-        let o_commit_oid = git2::Oid::from_str(o_commit).unwrap();
-        let a_commit_oid = git2::Oid::from_str(a_commit).unwrap();
-        let b_commit_oid = git2::Oid::from_str(b_commit).unwrap();
-        let m_commit_oid = git2::Oid::from_str(m_commit).unwrap();
-        let o_to_a = git_utils::changed_filenames(repo, &o_commit_oid, &a_commit_oid);
-        let o_to_b = git_utils::changed_filenames(repo, &o_commit_oid, &b_commit_oid);
-        // Keep a list of files changed in O→A AND in O→B
-        let merge_changes: HashSet<_> = o_to_a
-            .intersection(&o_to_b)
-            // Need to get to_owned to get intersection working later...
-            .map(|filename| filename.to_owned())
-            .collect();
-        match crate::find_bug_fix::find_bug_fixing_commits(repo, m_commit) {
-            Ok(descendants) => {
-                let descendants: Vec<_> = descendants
-                    .iter()
-                    .filter(|child| {
-                        // Only keep descendants if they occur within fix_distance steps of the merge
-                        git_utils::within_n_generations(repo, &m_commit_oid, child, fix_distance)
-                    })
-                    // Also want to filter based on overlapping files. Blames might be too selective
-                    // since we are hoping for semantic stuff. Heck, overlapping files might be too
-                    // selective but here we are. Downside: need the O information for that. So either
-                    // recalc that here or adjust code to be able to use our OABM output instead.
-                    // Leaning towards the latter since that is how we get our merges to begin with
-                    // anyway.
-                    // TODO: Also only keeping java files. Thought I had it but turns out no. Seems
-                    // that was only in the original merge finding.
-                    // TODO: So that means the total merge count also does not mean much then?
-                    .filter(|child| {
-                        let child_commit = repo.find_commit(**child).unwrap();
-                        if child_commit.parent_count() != 1 {
-                            return false;
-                        }
-                        let bfc_parent = child_commit.parent_id(0).unwrap();
+        let twm = crate::merge::ThreeWayMerge::from_oid_str(o_commit, a_commit, b_commit, m_commit).unwrap();
+        let merge_changes = twm.files_changed_in_both_branches(repo);
 
-                        // Keep bugfixing commit if changed file was also changed in O→A AND in O→B
-                        let bugfix_changes = git_utils::changed_filenames(repo, &bfc_parent, child);
-                        merge_changes.intersection(&bugfix_changes).next().is_some()
-                    })
-                    .collect();
+        match crate::find_bug_fix::BugFixFinder::find(repo, m_commit) {
+            Ok(mut bff) => {
+                // The argument is currently not used.
+                bff.msg_contains(vec![]);
+                bff.within_n_generations(repo, &twm.m, fix_distance);
+                bff.changed_files(repo, merge_changes);
+                let fixes = bff.collect();
                 print_merge_bugfix_csv_line(
                     m_commit,
-                    descendants.get(0),
-                    descendants.get(1),
-                    descendants.get(2),
+                    fixes.get(0),
+                    fixes.get(1),
+                    fixes.get(2),
                 );
             }
             Err(e) => eprintln!(
@@ -150,13 +119,12 @@ pub fn print_bug_fix_csv(
     }
 }
 
-/// Quick helper function for print_bug_fix_csv. Hence the ugly && that idk immediately how to
-/// solve.
+/// Quick helper function for print_bug_fix_csv.
 fn print_merge_bugfix_csv_line(
     m_commit: &str,
-    bugfix1: Option<&&git2::Oid>,
-    bugfix2: Option<&&git2::Oid>,
-    bugfix3: Option<&&git2::Oid>,
+    bugfix1: Option<&git2::Oid>,
+    bugfix2: Option<&git2::Oid>,
+    bugfix3: Option<&git2::Oid>,
 ) {
     println!(
         "{},{},{},{}",
@@ -183,43 +151,21 @@ pub fn print_bug_fix_csv_overlapping_lines(
     fix_distance: u32,
 ) {
     for commit in broken_commit_list {
-        let (o_commit, _a_commit, _b_commit, m_commit) = commit;
-        let o_commit_oid = git2::Oid::from_str(o_commit).unwrap();
-        // let a_commit_oid = git2::Oid::from_str(a_commit).unwrap();
-        // let b_commit_oid = git2::Oid::from_str(b_commit).unwrap();
-        let m_commit_oid = git2::Oid::from_str(m_commit).unwrap();
-        match crate::find_bug_fix::find_bug_fixing_commits(repo, m_commit) {
-            Ok(descendants) => {
-                let descendants: Vec<_> = descendants
-                    .iter()
-                    .filter(|child| {
-                        // Only keep descendants if they occur within fix_distance steps of the merge
-                        git_utils::within_n_generations(repo, &m_commit_oid, child, fix_distance)
-                    })
-                    // Try to filter on overlapping diffs/blames
-                    .filter(|child| {
-                        let child_commit = repo.find_commit(**child).unwrap();
-                        if child_commit.parent_count() != 1 {
-                            return false;
-                        }
-                        let bfc_parent = child_commit.parent_id(0).unwrap();
+        let (o_commit, a_commit, b_commit, m_commit) = commit;
+        let twm = crate::merge::ThreeWayMerge::from_oid_str(o_commit, a_commit, b_commit, m_commit).unwrap();
 
-                        git_utils::changed_same_line(
-                            repo,
-                            &o_commit_oid,
-                            &m_commit_oid,
-                            &bfc_parent,
-                            child,
-                        )
-                    })
-                    .collect();
-
-                // Output merge commit id and its bugfixes as CSV.
+        match crate::find_bug_fix::BugFixFinder::find(repo, m_commit) {
+            Ok(mut bff) => {
+                // The argument is currently not used.
+                bff.msg_contains(vec![]);
+                bff.within_n_generations(repo, &twm.m, fix_distance);
+                bff.changed_same_line_in_ext(repo, &twm, &vec!["java"]);
+                let fixes = bff.collect();
                 print_merge_bugfix_csv_line(
                     m_commit,
-                    descendants.get(0),
-                    descendants.get(1),
-                    descendants.get(2),
+                    fixes.get(0),
+                    fixes.get(1),
+                    fixes.get(2),
                 );
             }
             Err(e) => eprintln!(
@@ -260,12 +206,16 @@ where
     for commit_folder in folder.read_dir().unwrap().flatten() {
         let commit_folder = commit_folder.path();
         if let Some(commit_name) = commit_folder.file_name().and_then(|osstr| osstr.to_str()) {
-            match crate::find_bug_fix::find_bug_fixing_commits(repo, commit_name) {
-                Ok(descendants) => {
+            match crate::find_bug_fix::BugFixFinder::find(repo, commit_name) {
+                Ok(mut bff) => {
+                    bff.msg_contains(vec![]);
+                    let descendants = bff.collect();
+
                     let files_to_consider: HashSet<String> =
                         crate::relative_files::RelativeFiles::open(&commit_folder.join("m"))
                             .filter_map(|path| path.to_str().map(|s| s.to_owned()))
                             .collect();
+
                     if let Some(bug_fix_1) = descendants.get(0) {
                         git_utils::write_files_from_commit_to_disk(
                             commit_folder.join("bf1"),
@@ -297,11 +247,11 @@ where
                     // Output a CSV to STDOUT
                     print_merge_bugfix_csv_line(
                         commit_name,
-                        descendants.get(0).as_ref(),
-                        descendants.get(1).as_ref(),
-                        descendants.get(2).as_ref(),
+                        descendants.get(0),
+                        descendants.get(1),
+                        descendants.get(2),
                     );
-                }
+                },
                 Err(e) => eprintln!(
                     "Failed to find bug fixing commit for {}.\nError: {}",
                     commit_name, e

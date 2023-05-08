@@ -1,6 +1,7 @@
 //! This module is used to find three way merges
 
 use crate::git_utils;
+use std::collections::HashSet;
 
 /// Walks through commits, looking for those with (exactly) two parents. Collects parents and
 /// the common base.
@@ -78,6 +79,19 @@ impl ThreeWayMerge {
             b = self.b,
             m = self.m
         )
+    }
+
+    pub fn from_oid_str(
+        o_str: &str,
+        a_str: &str,
+        b_str: &str,
+        m_str: &str,
+    ) -> Result<Self, git2::Error> {
+        let o = git2::Oid::from_str(o_str)?;
+        let a = git2::Oid::from_str(a_str)?;
+        let b = git2::Oid::from_str(b_str)?;
+        let m = git2::Oid::from_str(m_str)?;
+        Ok(Self { o, a, b, m })
     }
 
     /// Analyse the merge diffs to decide which files have been modified and are thus
@@ -203,5 +217,15 @@ impl ThreeWayMerge {
             &self.b,
             only_extensions,
         )
+    }
+
+    /// Returns a list of files that were changed in O→A AND in O→B
+    pub fn files_changed_in_both_branches(&self, repo: &git2::Repository) -> HashSet<String> {
+        let o_to_a = git_utils::changed_filenames(repo, &self.o, &self.a);
+        let o_to_b = git_utils::changed_filenames(repo, &self.o, &self.b);
+        o_to_a
+            .intersection(&o_to_b)
+            .map(|filename| filename.to_owned())
+            .collect()
     }
 }
